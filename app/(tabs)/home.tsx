@@ -61,8 +61,7 @@ function CategoryPill({ pill }: { pill: CategoryPillData }) {
 export default function HomeScreen() {
   const [balanceHidden, setBalanceHidden] = useState(false);
 
-  // TODO: wire up once the Family Budget screen exists.
-  const handleFamilyBudgetPress = () => {};
+  const handleFamilyBudgetPress = () => router.push("/(tabs)/budget");
   // TODO: Bills & Reminders belongs to another team member's module.
   const handleBillsPress = () => {};
   const handleAllBudgetsPress = () => router.push("/(tabs)/budget");
