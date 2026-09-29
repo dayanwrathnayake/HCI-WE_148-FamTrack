@@ -37,43 +37,43 @@ export function BottomNavBar({ activeRouteName, onNavigate, onAddPress }: Bottom
 
   return (
     <SafeAreaView edges={["bottom"]} className="bg-white" style={{ borderTopWidth: 1, borderTopColor: "rgba(0,0,0,0.2)" }}>
-      <View className="h-[64px] flex-row items-center justify-between px-6">
-        <View className="flex-row gap-8">
-          {leftItems.map((item) => (
+      <View className="h-[64px] flex-row items-center">
+        {leftItems.map((item) => (
+          <View key={item.routeName} style={{ flex: 1, alignItems: "center" }}>
             <NavButton
-              key={item.routeName}
               item={item}
               active={activeRouteName === item.routeName}
               onPress={() => onNavigate(item.routeName)}
             />
-          ))}
+          </View>
+        ))}
+
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Pressable
+            onPress={onAddPress}
+            className="h-[46px] w-[46px] items-center justify-center rounded-full"
+            style={{
+              backgroundColor: "#10b981",
+              shadowColor: "#10b981",
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            <Icon name="plus" size={24} />
+          </Pressable>
         </View>
 
-        <Pressable
-          onPress={onAddPress}
-          className="h-[46px] w-[46px] items-center justify-center rounded-full"
-          style={{
-            backgroundColor: "#10b981",
-            shadowColor: "#10b981",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 4,
-          }}
-        >
-          <Icon name="plus" size={24} />
-        </Pressable>
-
-        <View className="flex-row gap-8">
-          {rightItems.map((item) => (
+        {rightItems.map((item) => (
+          <View key={item.routeName} style={{ flex: 1, alignItems: "center" }}>
             <NavButton
-              key={item.routeName}
               item={item}
               active={activeRouteName === item.routeName}
               onPress={() => onNavigate(item.routeName)}
             />
-          ))}
-        </View>
+          </View>
+        ))}
       </View>
     </SafeAreaView>
   );
