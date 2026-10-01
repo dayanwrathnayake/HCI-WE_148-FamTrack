@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   },
   centerSubLabel: {
     marginTop: 2,
-    fontSize: 8.5,
+    fontSize: 10,
     fontWeight: "400",
     color: "#8a93a0",
   },

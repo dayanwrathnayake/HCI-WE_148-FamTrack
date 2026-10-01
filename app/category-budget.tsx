@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   summaryLabel: {
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: "400",
     color: "#8a93a0",
   },
@@ -244,11 +244,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   summaryStatLabel: {
-    fontSize: 9,
+    fontSize: 10.5,
     fontWeight: "400",
   },
   summaryStatValue: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
   },
   categoryHeaderRow: {
@@ -258,12 +258,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   categoryHeaderTitle: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: "600",
     color: "#0e1116",
   },
   categoryHeaderSubtitle: {
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: "400",
     color: "#8a93a0",
   },
@@ -305,12 +305,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   categoryName: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0e1116",
   },
   categoryPercent: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: "600",
     color: "#0e1116",
   },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   categoryDetail: {
-    fontSize: 9,
+    fontSize: 10.5,
     fontWeight: "400",
     color: "#8a93a0",
   },
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   editBudgetText: {
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: "600",
     color: "#04240f",
   },
