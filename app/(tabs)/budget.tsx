@@ -112,7 +112,6 @@ export default function FamilyBudgetScreen() {
               {FAMILY_NAME} · {PERIOD_LABEL}
             </Text>
           </View>
-          <View style={styles.backButton} />
         </View>
 
         {/* Monthly Shared Budget */}
@@ -258,11 +257,12 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   headerRow: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
   },
   backButton: {
+    position: "absolute",
+    left: 0,
     height: 32,
     width: 32,
     borderRadius: 16,
