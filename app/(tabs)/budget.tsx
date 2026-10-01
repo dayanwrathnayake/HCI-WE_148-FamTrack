@@ -85,10 +85,8 @@ const SHARED_ACTIVITY: ActivityData[] = [
 
 export default function FamilyBudgetScreen() {
   const handleBack = () => router.back();
-  // TODO: build the Add Family Member screen next.
-  const handleInvite = () => {};
-  // TODO: build the Add Shared Expense screen.
-  const handleAddSharedExpense = () => {};
+  const handleInvite = () => router.push("/shared-expenses");
+  const handleAddSharedExpense = () => router.push("/shared-expenses");
   // TODO: View Report belongs to another team member's module.
   const handleViewReport = () => {};
   const handleCategoryBudgets = () => router.push("/category-budget");
