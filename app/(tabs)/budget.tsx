@@ -91,8 +91,7 @@ export default function FamilyBudgetScreen() {
   const handleAddSharedExpense = () => {};
   // TODO: View Report belongs to another team member's module.
   const handleViewReport = () => {};
-  // TODO: build the Category Budgets screen next.
-  const handleCategoryBudgets = () => {};
+  const handleCategoryBudgets = () => router.push("/category-budget");
   // TODO: Bills & Reminders belongs to another team member's module.
   const handleBillsReminders = () => {};
   // TODO: build the full Shared Expenses list screen.
