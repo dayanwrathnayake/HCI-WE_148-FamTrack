@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   },
   greetingSubtitle: {
     marginTop: 4,
-    fontSize: 15,
+    fontSize: 16.5,
     fontWeight: "700",
     color: "#999999",
   },
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: 15.5,
     fontWeight: "700",
     color: "#999999",
   },
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#efefef",
   },
   hideButtonText: {
-    fontSize: 14,
+    fontSize: 15.5,
     fontWeight: "700",
     color: "#000000",
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1dcd9f",
   },
   quickActionText: {
-    fontSize: 16,
+    fontSize: 17.5,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(106,102,255,0.1)",
   },
   allBudgetsText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "600",
     color: "#6a66ff",
   },
@@ -335,12 +335,12 @@ const styles = StyleSheet.create({
     color: "#222222",
   },
   budgetLeftLabel: {
-    fontSize: 14,
+    fontSize: 15.5,
     fontWeight: "600",
     color: "#222222",
   },
   budgetSpentText: {
-    fontSize: 12,
+    fontSize: 13.5,
     color: "rgba(56,56,56,0.5)",
   },
   categoryPillsRow: {
@@ -356,12 +356,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   categoryPillName: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "500",
     color: "#000000",
   },
   categoryPillAmount: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "600",
   },
   shortcutsContainer: {
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   shortcutLabel: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0e1116",
   },

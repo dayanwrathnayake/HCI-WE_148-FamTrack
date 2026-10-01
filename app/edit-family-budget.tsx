@@ -188,14 +188,14 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: "400",
     color: "#8a93a0",
   },
   fieldLabel: {
     marginTop: 20,
     marginBottom: 8,
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "600",
     letterSpacing: 0.76,
     color: "#5d6673",
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e1e5ea",
     backgroundColor: "#ffffff",
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: "500",
     color: "#0e1116",
   },
@@ -236,13 +236,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f6f8",
   },
   currencyPrefixText: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: "600",
     color: "#8a93a0",
   },
   monthlyBudgetInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16.5,
     fontWeight: "700",
     color: "#0e1116",
   },
@@ -265,16 +265,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   dropdownText: {
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: "500",
     color: "#0e1116",
   },
   dropdownChevron: {
-    fontSize: 10,
+    fontSize: 11.5,
     color: "#8a93a0",
   },
   dropdownEmoji: {
-    fontSize: 11,
+    fontSize: 12.5,
   },
   categoriesHeaderRow: {
     flexDirection: "row",
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   selectedCountText: {
     marginTop: 20,
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "600",
     color: "#00c46a",
   },
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     borderColor: "#9de3c0",
   },
   categoryPillText: {
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: "600",
     color: "#00854b",
   },
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   addCategoryText: {
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: "600",
     color: "#5d6673",
   },
@@ -337,12 +337,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   alertLabel: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0e1116",
   },
   alertAmount: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#135f3c",
   },
@@ -386,12 +386,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   toggleLabel: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0e1116",
   },
   toggleSubtitle: {
-    fontSize: 9.5,
+    fontSize: 11,
     fontWeight: "400",
     color: "#8a93a0",
   },
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     borderColor: "#d8dde3",
   },
   cancelButtonText: {
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: "600",
     color: "#5d6673",
   },
@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   saveButtonText: {
-    fontSize: 12.5,
+    fontSize: 14,
     fontWeight: "600",
     color: "#04240f",
   },
