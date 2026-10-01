@@ -63,17 +63,17 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   name: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "600",
     color: "#0e1116",
   },
   subtitle: {
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: "500",
     color: "#8a93a0",
   },
   amount: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "700",
     color: "#0e1116",
   },

@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     marginTop: 2,
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: "500",
     color: "#8a93a0",
   },
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   monthlyLabel: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "500",
     color: "#ffffff",
   },
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#05bf78",
   },
   onTrackText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "600",
     color: "#04240f",
   },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   monthlyFooterText: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: "500",
     color: "#ffffff",
   },
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: "600",
     color: "#0e1116",
   },
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e8f8f0",
   },
   inviteButtonText: {
-    fontSize: 10,
+    fontSize: 11.5,
     fontWeight: "600",
     color: "#00a85c",
   },
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   memberNameRow: {
-    fontSize: 11.5,
+    fontSize: 13,
   },
   memberName: {
     fontWeight: "700",
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     color: "#8a93a0",
   },
   memberAmount: {
-    fontSize: 11,
+    fontSize: 12.5,
     fontWeight: "600",
     color: "#0e1116",
   },
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   addExpenseLabel: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#04240f",
   },
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   shortcutLabel: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: "600",
     color: "#0e1116",
   },
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   seeAllText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: "500",
     color: "#00a85c",
   },
