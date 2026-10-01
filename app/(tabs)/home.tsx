@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "../../components/Icon";
@@ -92,7 +92,12 @@ export default function HomeScreen() {
             </View>
             <View style={styles.balanceDetails}>
               <Text style={styles.balanceLabel}>Total Balance</Text>
-              <Text style={styles.balanceAmount}>
+              <Text
+                style={styles.balanceAmount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
                 {balanceHidden ? "Rs ••,•••.••" : TOTAL_BALANCE}
               </Text>
             </View>
@@ -159,7 +164,11 @@ export default function HomeScreen() {
               style={[styles.shortcutCard, styles.shortcutShadow]}
             >
               <View style={[styles.shortcutIconWrap, { backgroundColor: "#e8f8f0" }]}>
-                <Text style={styles.shortcutEmoji}>👨‍👩‍👧</Text>
+                <Image
+                  source={require("../../assets/icons/family-budget.png")}
+                  style={styles.shortcutIconImage}
+                  resizeMode="cover"
+                />
               </View>
               <Text style={styles.shortcutLabel}>Family Budget</Text>
             </Pressable>
@@ -226,7 +235,7 @@ const styles = StyleSheet.create({
   balanceCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     borderRadius: 16,
     backgroundColor: "#ffffff",
     padding: 16,
@@ -237,13 +246,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   balanceIconWrap: {
-    height: 52,
-    width: 52,
+    height: 46,
+    width: 46,
     alignItems: "center",
     justifyContent: "center",
   },
   balanceDetails: {
     flex: 1,
+    flexShrink: 1,
     gap: 4,
   },
   balanceLabel: {
@@ -259,9 +269,10 @@ const styles = StyleSheet.create({
   hideButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    flexShrink: 0,
+    gap: 6,
     borderRadius: 999,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     backgroundColor: "#efefef",
   },
@@ -403,6 +414,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 11,
+    overflow: "hidden",
+  },
+  shortcutIconImage: {
+    height: 34,
+    width: 34,
   },
   shortcutEmoji: {
     fontSize: 16,
