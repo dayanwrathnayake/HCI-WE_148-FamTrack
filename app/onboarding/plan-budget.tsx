@@ -19,7 +19,7 @@ export default function OnboardingPlanBudget() {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={["top", "bottom"]}>
-      <View className="flex-1 justify-between px-6 pt-8 pb-4">
+      <View className="flex-1 px-6 pt-8 pb-4">
         <View>
           <Text className="text-[24px] font-bold" style={{ color: colors.textDark }}>
             Plan Your Budget
@@ -44,11 +44,11 @@ export default function OnboardingPlanBudget() {
               ))}
             </View>
           </View>
-
-          <View className="mt-9">
-            <OnboardingDots total={3} activeIndex={2} />
-          </View>
         </View>
+
+        <View className="flex-1" />
+
+        <OnboardingDots total={3} activeIndex={2} />
 
         <PrimaryButton label="Get Started" onPress={handleGetStarted} />
       </View>

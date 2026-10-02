@@ -36,6 +36,9 @@ export const icons = {
 
   // Family Budget
   arrowLeft: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 12H5M12 19l-7-7 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+
+  // Onboarding — brand mark (house outline with heart)
+  houseHeart: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.5 19V10L12 2.2L20.5 10V19A2.6 2.6 0 0 1 17.9 21.6H6.1A2.6 2.6 0 0 1 3.5 19Z" stroke="#05BF78" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/><path d="M12 16.61L11.36 16.12C9.08 14.41 7.58 13.29 7.58 11.91C7.58 10.78 8.65 9.89 10.01 9.89C10.78 9.89 11.52 10.19 12 10.66C12.48 10.19 13.22 9.89 13.99 9.89C15.35 9.89 16.42 10.78 16.42 11.91C16.42 13.29 14.92 14.41 12.64 16.12L12 16.61Z" stroke="#05BF78" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/></svg>`,
 };
 
 export type IconName = keyof typeof icons;

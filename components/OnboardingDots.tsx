@@ -9,7 +9,7 @@ type OnboardingDotsProps = {
 
 export function OnboardingDots({ total, activeIndex }: OnboardingDotsProps) {
   return (
-    <View className="flex-row items-center justify-center gap-2">
+    <View className="flex-row items-center justify-center gap-2" style={{ marginBottom: 96 }}>
       {Array.from({ length: total }).map((_, index) => (
         <View
           key={index}

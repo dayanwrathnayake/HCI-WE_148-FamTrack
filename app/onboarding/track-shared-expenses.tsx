@@ -51,7 +51,7 @@ export default function OnboardingTrackSharedExpenses() {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={["top", "bottom"]}>
-      <View className="flex-1 justify-between px-6 pt-8 pb-4">
+      <View className="flex-1 px-6 pt-8 pb-4">
         <View>
           <Text className="text-[24px] font-bold" style={{ color: colors.textDark }}>
             Track Shared Expenses
@@ -93,11 +93,11 @@ export default function OnboardingTrackSharedExpenses() {
               />
             ))}
           </View>
-
-          <View className="mt-9">
-            <OnboardingDots total={3} activeIndex={1} />
-          </View>
         </View>
+
+        <View className="flex-1" />
+
+        <OnboardingDots total={3} activeIndex={1} />
 
         <View className="flex-row items-center justify-between">
           <Pressable onPress={handleSkip} hitSlop={8}>
@@ -107,10 +107,10 @@ export default function OnboardingTrackSharedExpenses() {
           </Pressable>
           <Pressable
             onPress={handleNext}
-            className="flex-row items-center rounded-[22px] px-5 py-3"
+            className="items-center justify-center rounded-[22px] px-5 py-3"
             style={{ backgroundColor: colors.primary }}
           >
-            <Text className="text-[15px] font-semibold text-white">Next →</Text>
+            <Text className="text-[15px] font-semibold text-white">Next</Text>
           </Pressable>
         </View>
       </View>
