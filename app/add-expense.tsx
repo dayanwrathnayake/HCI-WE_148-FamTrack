@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
 import { ReceiptPicker } from "../components/ReceiptPicker";
+import { useExpenses } from "../context/ExpenseContext";
 import {
   ALL_MEMBERS,
   CATEGORIES,
@@ -16,6 +17,7 @@ export default function AddExpenseScreen() {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
+  const { addExpense } = useExpenses();
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] =
@@ -25,10 +27,18 @@ export default function AddExpenseScreen() {
   const [payers, setPayers] = useState<Member[]>([]);
   const [splitMembers, setSplitMembers] = useState<Member[]>([]);
 
-  const isValid = amount.trim().length > 0 && Number(amount) > 0;
+  const isValid =
+    amount.trim().length > 0 && Number(amount) > 0 && selectedCategory !== null;
 
-  const handleAmountChange = (text: string) =>
-    setAmount(text.replace(/[^0-9]/g, ""));
+  const handleAmountChange = (text: string) => {
+    const rawNumber = text.replace(/[^0-9]/g, "");
+    if (!rawNumber) {
+      setAmount("");
+      return;
+    }
+    const formatted = Number(rawNumber).toLocaleString("en-US");
+    setAmount(formatted);
+  };
 
   const handleDateChange = (text: string) => {
     const digits = text.replace(/[^0-9]/g, "");
@@ -54,6 +64,29 @@ export default function AddExpenseScreen() {
     } catch {
       router.replace("/(tabs)/home");
     }
+  };
+
+  const handleAddExpense = () => {
+    if (!isValid || !selectedCategory) return;
+
+    const payerName =
+      payers.length > 0
+        ? `Paid by ${payers.map((p) => p.name.toLowerCase()).join(", ")}`
+        : "Paid by you";
+
+    addExpense({
+      title: note.trim() !== "" ? note.trim() : selectedCategory.label,
+      category: selectedCategory.label as any,
+      amount: Number(amount.replace(/,/g, "")),
+      date: date || "Today",
+      payerText: payerName,
+      note: note,
+      receiptUri: receiptUri,
+      status: splitMembers.length > 0 ? "Shared" : "Personal",
+      iconEmoji: selectedCategory.emoji,
+    });
+
+    handleBack();
   };
 
   return (
@@ -150,7 +183,7 @@ export default function AddExpenseScreen() {
 
                 <TextInput
                   className="flex-1 text-[15px] font-medium text-[#1f2937] p-0 outline-none"
-                  value={amount ? Number(amount).toLocaleString("en-US") : ""}
+                  value={amount}
                   onChangeText={handleAmountChange}
                   keyboardType="numeric"
                   placeholder="0"
@@ -236,7 +269,7 @@ export default function AddExpenseScreen() {
               elevation: isValid ? 4 : 0,
             }}
             disabled={!isValid}
-            onPress={handleBack}
+            onPress={handleAddExpense}
           >
             <Text className="text-[15px] font-bold text-white">
               Add Expense
