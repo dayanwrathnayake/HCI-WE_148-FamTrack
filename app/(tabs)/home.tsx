@@ -70,7 +70,7 @@ export default function HomeScreen() {
 
   const handleFamilyBudgetPress = () => router.push("/(tabs)/budget");
   // TODO: Bills & Reminders belongs to another team member's module.
-  const handleBillsPress = () => {};
+  const handleBillsPress = () => router.push("/recurring-bills");
   const handleAllBudgetsPress = () => router.push("/(tabs)/budget");
   const handleSpendPress = () => router.push("/expense-history");
   const handleIncomePress = () => {};

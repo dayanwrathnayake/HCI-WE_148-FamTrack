@@ -87,11 +87,11 @@ export default function FamilyBudgetScreen() {
   const handleBack = () => router.back();
   const handleInvite = () => router.push("/shared-expenses");
   const handleAddSharedExpense = () => router.push("/shared-expenses");
+  const handleBillsReminders = () => router.push("/recurring-bills");
   // TODO: View Report belongs to another team member's module.
   const handleViewReport = () => {};
   const handleCategoryBudgets = () => router.push("/category-budget");
-  // TODO: Bills & Reminders belongs to another team member's module.
-  const handleBillsReminders = () => {};
+
   // TODO: build the full Shared Expenses list screen.
   const handleSeeAllActivity = () => {};
 
@@ -131,10 +131,16 @@ export default function FamilyBudgetScreen() {
           />
           <View style={styles.monthlyFooterRow}>
             <Text style={styles.monthlyFooterText}>
-              Spent <Text style={styles.monthlyFooterBold}>Rs {MONTHLY_SPENT.toLocaleString("en-US")}</Text>
+              Spent{" "}
+              <Text style={styles.monthlyFooterBold}>
+                Rs {MONTHLY_SPENT.toLocaleString("en-US")}
+              </Text>
             </Text>
             <Text style={styles.monthlyFooterText}>
-              Left <Text style={styles.monthlyFooterBold}>Rs {MONTHLY_LEFT.toLocaleString("en-US")}</Text>
+              Left{" "}
+              <Text style={styles.monthlyFooterBold}>
+                Rs {MONTHLY_LEFT.toLocaleString("en-US")}
+              </Text>
             </Text>
           </View>
         </View>
@@ -190,7 +196,9 @@ export default function FamilyBudgetScreen() {
             onPress={handleViewReport}
             style={[styles.shortcutCard, styles.shortcutShadow]}
           >
-            <View style={[styles.shortcutIconWrap, { backgroundColor: "#eef2ff" }]}>
+            <View
+              style={[styles.shortcutIconWrap, { backgroundColor: "#eef2ff" }]}
+            >
               <Text style={styles.shortcutEmoji}>📋</Text>
             </View>
             <Text style={styles.shortcutLabel}>View Report</Text>
@@ -200,7 +208,9 @@ export default function FamilyBudgetScreen() {
             onPress={handleCategoryBudgets}
             style={[styles.shortcutCard, styles.shortcutShadow]}
           >
-            <View style={[styles.shortcutIconWrap, { backgroundColor: "#e8f8f0" }]}>
+            <View
+              style={[styles.shortcutIconWrap, { backgroundColor: "#e8f8f0" }]}
+            >
               <Text style={styles.shortcutEmoji}>🎯</Text>
             </View>
             <Text style={styles.shortcutLabel}>Category Budgets</Text>
@@ -210,7 +220,9 @@ export default function FamilyBudgetScreen() {
             onPress={handleBillsReminders}
             style={[styles.shortcutCard, styles.shortcutShadow]}
           >
-            <View style={[styles.shortcutIconWrap, { backgroundColor: "#fff1e6" }]}>
+            <View
+              style={[styles.shortcutIconWrap, { backgroundColor: "#fff1e6" }]}
+            >
               <Text style={styles.shortcutEmoji}>🔔</Text>
             </View>
             <Text style={styles.shortcutLabel}>Bills & Reminders</Text>
