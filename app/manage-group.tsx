@@ -16,6 +16,7 @@ import { GroupAdminCard } from "../components/GroupAdminCard";
 import { Icon } from "../components/Icon";
 import { InviteMemberModal } from "../components/InviteMemberModal";
 import { MemberControlRow } from "../components/MemberControlRow";
+import { ShareInviteModal } from "../components/ShareInviteModal";
 import {
   GroupMemberControl,
   INITIAL_ADMIN,
@@ -29,6 +30,8 @@ export default function ManageGroupScreen() {
 
   const [autoSync, setAutoSync] = useState(true);
   const [inviteViaQr, setInviteViaQr] = useState(true);
+
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
 
   const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [editingMember, setEditingMember] = useState<GroupMemberControl | null>(
@@ -242,12 +245,20 @@ export default function ManageGroupScreen() {
               <View className="h-[1px] bg-gray-100" />
 
               <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-3 flex-1 mr-2">
+                <Pressable
+                  onPress={() => setIsShareModalVisible(true)}
+                  className="flex-row items-center gap-3 flex-1 mr-2"
+                >
                   <Text className="text-[17px]">📲</Text>
-                  <Text className="text-[13px] font-semibold text-[#111827]">
-                    Invite via Link & QR Code
-                  </Text>
-                </View>
+                  <View>
+                    <Text className="text-[13px] font-semibold text-[#111827]">
+                      Invite via Link & QR Code
+                    </Text>
+                    <Text className="text-[11px] text-[#05bf78] font-bold mt-0.5">
+                      Tap to share or scan ›
+                    </Text>
+                  </View>
+                </Pressable>
                 <Switch
                   value={inviteViaQr}
                   onValueChange={setInviteViaQr}
@@ -291,6 +302,11 @@ export default function ManageGroupScreen() {
         onClose={() => setEditingMember(null)}
         onSave={handleUpdateMember}
         onRemove={handleRemoveMember}
+      />
+
+      <ShareInviteModal
+        visible={isShareModalVisible}
+        onClose={() => setIsShareModalVisible(false)}
       />
     </View>
   );
