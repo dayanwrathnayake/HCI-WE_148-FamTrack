@@ -1,4 +1,5 @@
 import "../global.css";
+import { P6Probe } from "../lib/__p6check"; // P6TEMP
 
 import { Stack, useSegments } from "expo-router";
 import { useEffect } from "react";
@@ -44,6 +45,9 @@ function RootNavigator() {
           <Stack.Screen name="shared-expenses" />
         </Stack.Protected>
       </Stack>
+
+      {/* P6TEMP */}
+      <P6Probe />
 
       {/* Covers the first frames while the saved session is restored, so nothing flashes. */}
       {initializing ? <View style={styles.loading} /> : null}
