@@ -1,3 +1,4 @@
+import { withAuthFlow } from "../lib/authFlow";
 import { getAuthErrorMessage, sendPasswordReset, signInWithEmail, signOutUser } from "./authService";
 import { getUserProfile } from "./userService";
 
@@ -45,24 +46,28 @@ async function signOutQuietly(): Promise<void> {
  * error if sign-in fails, or a LoginError (after signing out) if the profile is missing
  * or cannot be safely loaded. Resolves only when both checks pass.
  */
-export async function loginUser(email: string, password: string): Promise<LoginResult> {
-  const user = await signInWithEmail(email, password);
+export function loginUser(email: string, password: string): Promise<LoginResult> {
+  // The lock is taken before sign-in, so the route guards stay closed until the
+  // profile check has passed (or the user has been signed out again).
+  return withAuthFlow(async () => {
+    const user = await signInWithEmail(email, password);
 
-  let profile;
-  try {
-    profile = await getUserProfile(user.uid);
-  } catch (error) {
-    console.warn("[login] could not read the user profile", error);
-    await signOutQuietly();
-    throw new LoginError("profile-unavailable");
-  }
+    let profile;
+    try {
+      profile = await getUserProfile(user.uid);
+    } catch (error) {
+      console.warn("[login] could not read the user profile", error);
+      await signOutQuietly();
+      throw new LoginError("profile-unavailable");
+    }
 
-  if (!profile) {
-    await signOutQuietly();
-    throw new LoginError("profile-missing");
-  }
+    if (!profile) {
+      await signOutQuietly();
+      throw new LoginError("profile-missing");
+    }
 
-  return { uid: user.uid, familyId: profile.familyId };
+    return { uid: user.uid, familyId: profile.familyId };
+  });
 }
 
 /**

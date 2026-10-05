@@ -53,10 +53,11 @@ export default function RegisterScreen() {
     setSubmitting(true);
     try {
       await registerUser({ name, email, password });
-      // Only reached when the account AND its Firestore profile were both created.
-      router.replace("/(tabs)/home");
+      // No manual navigation: once the account AND its Firestore profile both exist, the
+      // route guards in app/_layout.tsx replace this screen with the Home tab.
     } catch (e) {
       setError(getRegistrationErrorMessage(e));
+    } finally {
       setSubmitting(false);
     }
   };

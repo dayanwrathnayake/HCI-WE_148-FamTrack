@@ -1,6 +1,7 @@
 import type { User } from "firebase/auth";
 import { collection, doc, getDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 
+import { withAuthFlow } from "../lib/authFlow";
 import { db } from "../lib/firebase";
 import type { FamilyInvitation, FamilyMember } from "../types/models";
 import { deleteAuthUser, getAuthErrorMessage, signOutUser, signUpWithEmail } from "./authService";
@@ -151,14 +152,18 @@ async function rollbackAuthUser(user: User): Promise<boolean> {
  * created (nothing to roll back), or a RegistrationError if the Firestore step failed
  * (after attempting to delete the new Auth user).
  */
-export async function registerUser(input: RegisterInput): Promise<RegistrationResult> {
-  const user = await signUpWithEmail(input.email, input.password);
-  try {
-    return await completeRegistration(user, input.name);
-  } catch (error) {
-    console.warn("[registration] profile setup failed, rolling back", error);
-    throw new RegistrationError(error, await rollbackAuthUser(user));
-  }
+export function registerUser(input: RegisterInput): Promise<RegistrationResult> {
+  // The lock is taken before the Auth user is created, so the route guards stay closed
+  // until the Firestore setup has finished (or been rolled back).
+  return withAuthFlow(async () => {
+    const user = await signUpWithEmail(input.email, input.password);
+    try {
+      return await completeRegistration(user, input.name);
+    } catch (error) {
+      console.warn("[registration] profile setup failed, rolling back", error);
+      throw new RegistrationError(error, await rollbackAuthUser(user));
+    }
+  });
 }
 
 /** A message that is safe to show on the Register screen for any error from registerUser. */

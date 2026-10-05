@@ -53,10 +53,11 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       await loginUser(email, password);
-      // Only reached when sign-in AND the profile check both succeeded.
-      router.replace("/(tabs)/home");
+      // No manual navigation: once sign-in AND the profile check have both succeeded, the
+      // route guards in app/_layout.tsx replace this screen with the Home tab.
     } catch (e) {
       setMessage({ text: getLoginErrorMessage(e), tone: "error" });
+    } finally {
       setSubmitting(false);
     }
   };
