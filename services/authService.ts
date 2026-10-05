@@ -1,5 +1,6 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -26,6 +27,11 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
 export function signOutUser(): Promise<void> {
   return signOut(auth);
+}
+
+/** Permanently deletes the account. Used to roll back a half-finished registration. */
+export function deleteAuthUser(user: User): Promise<void> {
+  return deleteUser(user);
 }
 
 export function sendPasswordReset(email: string): Promise<void> {

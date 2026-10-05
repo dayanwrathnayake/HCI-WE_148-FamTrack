@@ -17,6 +17,8 @@ import { OrDivider } from "../components/OrDivider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SocialButton } from "../components/SocialButton";
 import { colors } from "../constants/colors";
+import { getRegistrationErrorMessage, registerUser } from "../services/registrationService";
+import { validateEmail, validateName, validatePassword } from "../utils/validation";
 
 const registerIllustration = require("../assets/auth/register-illustration.png");
 
@@ -24,15 +26,40 @@ const HORIZONTAL_PADDING = 31;
 const ILLUSTRATION_SIZE_RATIO = 221 / 402; // illustration width relative to the Figma reference frame
 
 export default function RegisterScreen() {
-  const [name, setName] = useState("Kamal Perera");
-  const [email, setEmail] = useState("kamalperera@gmail.com");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const { width: screenWidth } = useWindowDimensions();
   const illustrationSize = screenWidth * ILLUSTRATION_SIZE_RATIO;
 
-  const handleCreateAccount = () => router.replace("/(tabs)/home");
+  const handleCreateAccount = async () => {
+    if (submitting) return;
+
+    const validationError =
+      validateName(name) ??
+      validateEmail(email) ??
+      validatePassword(password) ??
+      (agreed ? null : "Please agree to the Terms & Privacy Policy.");
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+    try {
+      await registerUser({ name, email, password });
+      // Only reached when the account AND its Firestore profile were both created.
+      router.replace("/(tabs)/home");
+    } catch (e) {
+      setError(getRegistrationErrorMessage(e));
+      setSubmitting(false);
+    }
+  };
   const handleLogIn = () => router.push("/login");
   const handleGoogleSignUp = () => {};
   const handleAppleSignUp = () => {};
@@ -96,8 +123,18 @@ export default function RegisterScreen() {
             </Text>
           </Pressable>
 
+          {error ? (
+            <Text className="mt-3 text-[12px]" style={{ color: colors.error }}>
+              {error}
+            </Text>
+          ) : null}
+
           <View className="mt-6">
-            <PrimaryButton label="Create Account" onPress={handleCreateAccount} />
+            <PrimaryButton
+              label="Create Account"
+              onPress={handleCreateAccount}
+              loading={submitting}
+            />
           </View>
 
           <View className="mt-6">
