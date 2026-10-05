@@ -12,6 +12,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="add-expense" />
           <Stack.Screen name="expense-history" />
+          <Stack.Screen name="manage-group" />
         </Stack>
       </ExpenseProvider>
     </SafeAreaProvider>
