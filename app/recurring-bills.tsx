@@ -5,15 +5,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AppBottomNav } from "../components/AppBottomNav";
 import { BillItemRow } from "../components/BillItemRow";
 import { Icon } from "../components/Icon";
-import {
-  BILL_CATEGORIES,
-  BILL_SUMMARY,
-  BillCategoryFilter,
-  MOCK_PAID_BILLS,
-  MOCK_UPCOMING_BILLS,
-} from "../constants/bills";
+import { BILL_CATEGORIES, BillCategoryFilter } from "../constants/bills";
+import { useBills } from "../context/BillsContext";
 
 export default function RecurringBillsScreen() {
+  const { upcomingBills, paidBills, totalCommitments } = useBills();
+
   const [selectedCategory, setSelectedCategory] =
     useState<BillCategoryFilter>("all");
 
@@ -25,19 +22,23 @@ export default function RecurringBillsScreen() {
     }
   };
 
+  const handleAddBill = () => {
+    router.push("/add-bill");
+  };
+
   const filteredUpcoming = useMemo(() => {
-    if (selectedCategory === "all") return MOCK_UPCOMING_BILLS;
-    return MOCK_UPCOMING_BILLS.filter(
+    if (selectedCategory === "all") return upcomingBills;
+    return upcomingBills.filter(
       (b) => b.category.toLowerCase() === selectedCategory,
     );
-  }, [selectedCategory]);
+  }, [selectedCategory, upcomingBills]);
 
   const filteredPaid = useMemo(() => {
-    if (selectedCategory === "all") return MOCK_PAID_BILLS;
-    return MOCK_PAID_BILLS.filter(
+    if (selectedCategory === "all") return paidBills;
+    return paidBills.filter(
       (b) => b.category.toLowerCase() === selectedCategory,
     );
-  }, [selectedCategory]);
+  }, [selectedCategory, paidBills]);
 
   return (
     <View className="flex-1 bg-white">
@@ -79,14 +80,14 @@ export default function RecurringBillsScreen() {
                 Total Monthly Commitments
               </Text>
               <Text className="text-[28px] font-extrabold text-white mt-1">
-                Rs {BILL_SUMMARY.totalCommitments.toLocaleString("en-US")}
+                Rs {totalCommitments.toLocaleString("en-US")}
               </Text>
             </View>
 
             <View className="flex-row items-center gap-2 bg-[#d1fae5] px-3.5 py-2.5 rounded-[14px]">
               <Text className="text-[14px]">📅</Text>
               <Text className="text-[12.5px] font-bold text-[#065f46] flex-1">
-                {BILL_SUMMARY.nextDueAlert}
+                Next due in 3 days: Home Fiber
               </Text>
             </View>
           </View>
@@ -117,9 +118,16 @@ export default function RecurringBillsScreen() {
           </View>
 
           <View className="gap-2.5">
-            <Text className="text-[14px] font-bold text-[#111827]">
-              Upcoming This Month
-            </Text>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-[14px] font-bold text-[#111827]">
+                Upcoming This Month ({filteredUpcoming.length})
+              </Text>
+              <Pressable onPress={handleAddBill} hitSlop={6}>
+                <Text className="text-[12px] font-bold text-[#05bf78]">
+                  + Add Bill
+                </Text>
+              </Pressable>
+            </View>
 
             {filteredUpcoming.length === 0 ? (
               <View className="bg-white rounded-[20px] p-6 items-center">
@@ -128,9 +136,13 @@ export default function RecurringBillsScreen() {
                 </Text>
               </View>
             ) : (
-              <View className="gap-2.5">
-                {filteredUpcoming.map((bill) => (
-                  <BillItemRow key={bill.id} bill={bill} />
+              <View className="bg-white rounded-[22px] p-4 shadow-sm shadow-black/5 elevation-1">
+                {filteredUpcoming.map((bill, index) => (
+                  <BillItemRow
+                    key={bill.id}
+                    bill={bill}
+                    isLast={index === filteredUpcoming.length - 1}
+                  />
                 ))}
               </View>
             )}
@@ -138,7 +150,7 @@ export default function RecurringBillsScreen() {
 
           <View className="gap-2.5">
             <Text className="text-[14px] font-bold text-[#111827]">
-              Paid Bills This Month
+              Paid Bills This Month ({filteredPaid.length})
             </Text>
 
             {filteredPaid.length === 0 ? (
@@ -148,9 +160,13 @@ export default function RecurringBillsScreen() {
                 </Text>
               </View>
             ) : (
-              <View className="gap-2.5">
-                {filteredPaid.map((bill) => (
-                  <BillItemRow key={bill.id} bill={bill} />
+              <View className="bg-white rounded-[22px] p-4 shadow-sm shadow-black/5 elevation-1">
+                {filteredPaid.map((bill, index) => (
+                  <BillItemRow
+                    key={bill.id}
+                    bill={bill}
+                    isLast={index === filteredPaid.length - 1}
+                  />
                 ))}
               </View>
             )}
