@@ -9,9 +9,10 @@ import {
   MOCK_SAVINGS_SUMMARY,
   SavingGoal,
 } from "../../constants/savings";
+import { useSavings } from "../../context/SavingsContext";
 
 export default function SavingsGoalsScreen() {
-  const [goals, setGoals] = useState<SavingGoal[]>(MOCK_SAVING_GOALS);
+  const { goals, totalSavings } = useSavings();
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -22,11 +23,7 @@ export default function SavingsGoalsScreen() {
   };
 
   const handleCreateNewGoal = () => {
-    Alert.alert(
-      "Create Goal",
-      "Goal creation modal / feature will open here.",
-      [{ text: "OK" }],
-    );
+    router.push("/create-goal");
   };
 
   const handleNotificationPress = () => {
