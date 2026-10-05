@@ -19,6 +19,11 @@ export function validateEmail(email: string): string | null {
   return null;
 }
 
+/** Login only needs a password to be present; Firebase decides whether it is correct. */
+export function validateLoginPassword(password: string): string | null {
+  return password.length === 0 ? "Please enter your password." : null;
+}
+
 export function validatePassword(password: string): string | null {
   if (password.length === 0) return "Please enter a password.";
   if (password.length < MIN_PASSWORD_LENGTH) {

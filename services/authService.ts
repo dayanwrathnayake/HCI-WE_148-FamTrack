@@ -46,6 +46,7 @@ export function subscribeToAuthState(callback: (user: User | null) => void): () 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "An account with this email already exists.",
   "auth/invalid-email": "Please enter a valid email address.",
+  "auth/missing-email": "Please enter your email address.",
   "auth/weak-password": "Password must be at least 6 characters.",
   "auth/missing-password": "Please enter your password.",
   "auth/invalid-credential": "Incorrect email or password.",
