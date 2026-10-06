@@ -1,5 +1,4 @@
-import { Tabs } from "expo-router";
-
+import { Tabs, router } from "expo-router";
 import { BottomNavBar } from "../../components/BottomNavBar";
 
 export default function TabsLayout() {
@@ -10,6 +9,7 @@ export default function TabsLayout() {
         <BottomNavBar
           activeRouteName={state.routes[state.index].name}
           onNavigate={(routeName) => navigation.navigate(routeName)}
+          onAddPress={() => router.push("/add-expense")}
         />
       )}
     >

@@ -1,6 +1,13 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "../../components/Icon";
@@ -67,9 +74,9 @@ export default function HomeScreen() {
 
   const handleFamilyBudgetPress = () => router.push("/(tabs)/budget");
   // TODO: Bills & Reminders belongs to another team member's module.
-  const handleBillsPress = () => {};
+  const handleBillsPress = () => router.push("/recurring-bills");
   const handleAllBudgetsPress = () => router.push("/(tabs)/budget");
-  const handleSpendPress = () => {};
+  const handleSpendPress = () => router.push("/expense-history");
   const handleIncomePress = () => {};
   const handleNotificationPress = () => {};
 
@@ -87,7 +94,9 @@ export default function HomeScreen() {
               ) : null}
               👋
             </Text>
-            <Text style={styles.greetingSubtitle}>Ready to track your money..!</Text>
+            <Text style={styles.greetingSubtitle}>
+              Ready to track your money..!
+            </Text>
           </View>
           <Pressable onPress={handleNotificationPress} hitSlop={8}>
             <Icon name="notification" size={34} />
@@ -111,19 +120,30 @@ export default function HomeScreen() {
                 {balanceHidden ? "Rs ••,•••.••" : TOTAL_BALANCE}
               </Text>
             </View>
-            <Pressable onPress={() => setBalanceHidden((h) => !h)} style={styles.hideButton}>
+            <Pressable
+              onPress={() => setBalanceHidden((h) => !h)}
+              style={styles.hideButton}
+            >
               <Icon name="eye" size={18} />
-              <Text style={styles.hideButtonText}>{balanceHidden ? "Show" : "Hide"}</Text>
+              <Text style={styles.hideButtonText}>
+                {balanceHidden ? "Show" : "Hide"}
+              </Text>
             </Pressable>
           </View>
 
           {/* Spend / Income */}
           <View style={styles.quickActionsRow}>
-            <Pressable onPress={handleSpendPress} style={[styles.quickActionButton, styles.spendButton]}>
+            <Pressable
+              onPress={handleSpendPress}
+              style={[styles.quickActionButton, styles.spendButton]}
+            >
               <Icon name="spend" width={31} height={31} />
               <Text style={styles.quickActionText}>Spend</Text>
             </Pressable>
-            <Pressable onPress={handleIncomePress} style={[styles.quickActionButton, styles.incomeButton]}>
+            <Pressable
+              onPress={handleIncomePress}
+              style={[styles.quickActionButton, styles.incomeButton]}
+            >
               <Icon name="income" width={29} height={31} />
               <Text style={styles.quickActionText}>Income</Text>
             </Pressable>
@@ -133,7 +153,10 @@ export default function HomeScreen() {
           <View style={styles.budgetCard}>
             <View style={styles.budgetHeaderRow}>
               <Text style={styles.budgetTitle}>Budget</Text>
-              <Pressable onPress={handleAllBudgetsPress} style={styles.allBudgetsButton}>
+              <Pressable
+                onPress={handleAllBudgetsPress}
+                style={styles.allBudgetsButton}
+              >
                 <Text style={styles.allBudgetsText}>All Budgets</Text>
               </Pressable>
             </View>
@@ -145,7 +168,9 @@ export default function HomeScreen() {
                     <Text style={styles.budgetLeftAmount}>{BUDGET_LEFT} </Text>
                     <Text style={styles.budgetLeftLabel}>left</Text>
                   </Text>
-                  <Text style={styles.budgetSpentText}>{BUDGET_SPENT_TEXT}</Text>
+                  <Text style={styles.budgetSpentText}>
+                    {BUDGET_SPENT_TEXT}
+                  </Text>
                 </View>
                 <ProgressBar
                   progress={BUDGET_PROGRESS}
@@ -173,7 +198,12 @@ export default function HomeScreen() {
               onPress={handleFamilyBudgetPress}
               style={[styles.shortcutCard, styles.shortcutShadow]}
             >
-              <View style={[styles.shortcutIconWrap, { backgroundColor: "#e8f8f0" }]}>
+              <View
+                style={[
+                  styles.shortcutIconWrap,
+                  { backgroundColor: "#e8f8f0" },
+                ]}
+              >
                 <Image
                   source={require("../../assets/icons/family-budget.png")}
                   style={styles.shortcutIconImage}
@@ -187,7 +217,12 @@ export default function HomeScreen() {
               onPress={handleBillsPress}
               style={[styles.shortcutCard, styles.shortcutShadow]}
             >
-              <View style={[styles.shortcutIconWrap, { backgroundColor: "#fff1e6" }]}>
+              <View
+                style={[
+                  styles.shortcutIconWrap,
+                  { backgroundColor: "#fff1e6" },
+                ]}
+              >
                 <Text style={styles.shortcutEmoji}>🔔</Text>
               </View>
               <Text style={styles.shortcutLabel}>Bills & Reminders</Text>

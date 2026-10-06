@@ -6,6 +6,9 @@ import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { BillsProvider } from "../context/BillsContext";
+import { ExpenseProvider } from "../context/ExpenseContext";
+import { SavingsProvider } from "../context/SavingsContext";
 import { markOnboardingCompleted } from "../services/onboardingService";
 
 function RootNavigator() {
@@ -42,6 +45,12 @@ function RootNavigator() {
           <Stack.Screen name="category-budget" />
           <Stack.Screen name="edit-family-budget" />
           <Stack.Screen name="shared-expenses" />
+          <Stack.Screen name="add-expense" />
+          <Stack.Screen name="expense-history" />
+          <Stack.Screen name="manage-group" />
+          <Stack.Screen name="create-goal" />
+          <Stack.Screen name="recurring-bills" />
+          <Stack.Screen name="add-bill" />
         </Stack.Protected>
       </Stack>
 
@@ -55,7 +64,13 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <RootNavigator />
+        <ExpenseProvider>
+          <SavingsProvider>
+            <BillsProvider>
+              <RootNavigator />
+            </BillsProvider>
+          </SavingsProvider>
+        </ExpenseProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
