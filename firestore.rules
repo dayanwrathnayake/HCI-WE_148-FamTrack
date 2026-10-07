@@ -250,5 +250,27 @@ service cloud.firestore {
         && isMemberOf(resource.data.familyId)
         && (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId));
     }
+
+    // ---------- recurring Bills ----------
+    match /recurringBills/{billId} {
+      allow read: if signedIn() && isMemberOf(resource.data.familyId);
+
+      allow create: if signedIn() 
+        && isMemberOf(request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+
+      allow delete: if signedIn() 
+        && isMemberOf(resource.data.familyId)
+        && (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId));
+
+      allow update: if signedIn() && isMemberOf(resource.data.familyId)
+        && (
+          (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId))
+          ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidByText'])
+        );
+    }
   }
 }
