@@ -10,6 +10,7 @@ export type HistoryItem = {
   /** The category's label, e.g. "Groceries". */
   category: string;
   time: string;
+  date?: string;
   payerText: string;
   amount: number;
   status: ExpenseStatus;

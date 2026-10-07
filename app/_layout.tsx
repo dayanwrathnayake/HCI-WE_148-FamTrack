@@ -11,6 +11,9 @@ import { BudgetProvider } from "../context/BudgetContext";
 import { ExpenseProvider } from "../context/ExpenseContext";
 import { FamilyProvider } from "../context/FamilyContext";
 import { SavingsProvider } from "../context/SavingsContext";
+import { AccountProvider } from "../context/AccountContext";
+import { IncomeProvider } from "../context/IncomeContext";
+import { NotificationProvider } from "../context/NotificationContext";
 import { markOnboardingCompleted } from "../services/onboardingService";
 
 function RootNavigator() {
@@ -53,6 +56,11 @@ function RootNavigator() {
           <Stack.Screen name="create-goal" />
           <Stack.Screen name="recurring-bills" />
           <Stack.Screen name="add-bill" />
+          <Stack.Screen name="my-account" />
+          <Stack.Screen name="income" />
+          <Stack.Screen name="add-income" />
+          <Stack.Screen name="reports" />
+          <Stack.Screen name="notifications" />
         </Stack.Protected>
       </Stack>
 
@@ -67,15 +75,21 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <FamilyProvider>
-          <BudgetProvider>
-            <ExpenseProvider>
-              <SavingsProvider>
-                <BillsProvider>
-                  <RootNavigator />
-                </BillsProvider>
-              </SavingsProvider>
-            </ExpenseProvider>
-          </BudgetProvider>
+          <NotificationProvider>
+            <AccountProvider>
+              <IncomeProvider>
+                <BudgetProvider>
+                  <ExpenseProvider>
+                    <SavingsProvider>
+                      <BillsProvider>
+                        <RootNavigator />
+                      </BillsProvider>
+                    </SavingsProvider>
+                  </ExpenseProvider>
+                </BudgetProvider>
+              </IncomeProvider>
+            </AccountProvider>
+          </NotificationProvider>
         </FamilyProvider>
       </AuthProvider>
     </SafeAreaProvider>

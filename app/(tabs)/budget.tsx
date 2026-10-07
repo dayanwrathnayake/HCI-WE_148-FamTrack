@@ -107,8 +107,7 @@ export default function FamilyBudgetScreen() {
   const handleInvite = () => router.push("/shared-expenses");
   const handleAddSharedExpense = () => router.push("/shared-expenses");
   const handleBillsReminders = () => router.push("/recurring-bills");
-  // TODO: View Report belongs to another team member's module.
-  const handleViewReport = () => {};
+  const handleViewReport = () => router.push("/reports");
   const handleCategoryBudgets = () => router.push("/category-budget");
 
   const handleSeeAllActivity = () => router.push("/expense-history");

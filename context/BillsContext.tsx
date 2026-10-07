@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from "react";
 import { ImageSourcePropType } from "react-native";
+import { useNotifications } from "./NotificationContext";
 import {
   BillCategory,
   BillItem,
@@ -28,6 +29,7 @@ type BillsContextType = {
 const BillsContext = createContext<BillsContextType | undefined>(undefined);
 
 export function BillsProvider({ children }: { children: React.ReactNode }) {
+  const { addNotification } = useNotifications();
   const [upcomingBills, setUpcomingBills] =
     useState<BillItem[]>(MOCK_UPCOMING_BILLS);
   const [paidBills, setPaidBills] = useState<BillItem[]>(MOCK_PAID_BILLS);
@@ -51,6 +53,7 @@ export function BillsProvider({ children }: { children: React.ReactNode }) {
     };
 
     setUpcomingBills((prev) => [newBill, ...prev]);
+    addNotification({ title: input.title, detail: `Bill due: ${input.dueDateText || "End of Month"}`, amount: input.amount, kind: "bill", emoji: input.iconEmoji });
   };
 
   return (
