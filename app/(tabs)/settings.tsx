@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import { Icon } from "../../components/Icon";
@@ -14,6 +14,7 @@ const glyphs = {
   bell: '<path d="M5 16h14l-2-3V9a5 5 0 0 0-10 0v4z" fill="#d9b522"/><path d="M10 19h4M12 2v2" stroke="#967913" stroke-width="2" stroke-linecap="round"/>',
   lock: '<path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="#74a7b5" stroke-width="2"/><rect x="6" y="10" width="12" height="11" rx="2" fill="#dbbd54"/><path d="M12 14v3" stroke="white" stroke-width="2"/>',
   help: '<path d="M9 7a3 3 0 1 1 5 2c-2 1-2 2-2 4" fill="none" stroke="#f52b55" stroke-width="2.5" stroke-linecap="round"/><circle cx="12" cy="18" r="1.3" fill="#f52b55"/>',
+  trash: '<path d="M4 6h16M9 6V3h6v3M6 6l1 16h10l1-16M10 10v8M14 10v8" fill="none" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   phone: '<path d="m5 3 4 4-2 3c2 3 4 5 7 6l3-2 4 4-2 3C10 21 3 14 3 5z" fill="#627c75"/>',
   gear: '<path d="m10 2 4 0 1 3 3-1 3 3-1 3 3 1v4l-3 1 1 3-3 3-3-1-1 3h-4l-1-3-3 1-3-3 1-3-3-1v-4l3-1-1-3 3-3 3 1z" fill="#080808"/><circle cx="12" cy="13" r="4" fill="white"/>',
 };
@@ -31,7 +32,8 @@ function ProfileRow({ title, subtitle, icon, background, onPress, badge, last }:
   );
 }
 export default function ProfileScreen() {
-  const { account } = useAccount();
+  const { account, deleteAccount } = useAccount();
+  const [deleteVisible, setDeleteVisible] = useState(false);
   const { accountUpdated } = useLocalSearchParams<{ accountUpdated?: string }>();
   const showSuccess = !!accountUpdated;
   useEffect(() => {
@@ -79,11 +81,20 @@ export default function ProfileScreen() {
               <Switch accessibilityLabel="Budget alerts and bill reminders" value={notificationsEnabled} onValueChange={setNotificationsEnabled} trackColor={{ false: "#d9dfe2", true: "#00c878" }} thumbColor="#ffffff" style={styles.toggle} />
             </View>
             <ProfileRow title="Security" subtitle="App lock, biometrics" icon="lock" background="#eaf8ff" onPress={() => showPendingFeature("Security")} />
-            <ProfileRow title="Help Center" subtitle="FAQs and guides" icon="help" background="#ffe9ef" last onPress={() => showPendingFeature("Help Center")} />
+            <ProfileRow title="Help Center" subtitle="FAQs and guides" icon="help" background="#ffe9ef" onPress={() => showPendingFeature("Help Center")} />
+            <ProfileRow title="Delete Account" subtitle="Remove your account" icon="trash" background="#fff0f0" last onPress={() => setDeleteVisible(true)} />
           </View>
         </View>
         <Pressable accessibilityRole="button" onPress={() => router.replace("/login")} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>Log out</Text></Pressable>
       </ScrollView>
+      <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => setDeleteVisible(false)}>
+        <View style={styles.deleteOverlay}><View style={styles.deleteDialog} accessibilityViewIsModal>
+          <Text style={styles.deleteTitle}>Delete your account?</Text>
+          <Text style={styles.deleteDescription}>This will clear your profile and sign you out. You’ll need to create a new account to continue. This prototype stores accounts for the current session only.</Text>
+          <Pressable accessibilityRole="button" onPress={() => { setDeleteVisible(false); deleteAccount(); router.replace({ pathname: "/login", params: { accountDeleted: "1" } }); }} style={styles.confirmDelete}><Text style={styles.confirmDeleteText}>Delete account</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setDeleteVisible(false)} style={styles.deleteButton}><Text style={styles.cancelDelete}>Keep my account</Text></Pressable>
+        </View></View>
+      </Modal>
       {showSuccess && (
         <View pointerEvents="none" style={styles.successWrap}>
           <View style={styles.successBubble}>
@@ -96,6 +107,7 @@ export default function ProfileScreen() {
   );
 }
 const styles = StyleSheet.create({
+  deleteButton: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: 8 }, deleteText: { fontSize: 14, fontWeight: "600", color: "#dc2626" }, deleteOverlay: { flex: 1, backgroundColor: "rgba(16,24,42,0.4)", alignItems: "center", justifyContent: "center", padding: 24 }, deleteDialog: { width: "100%", maxWidth: 380, padding: 24, borderRadius: 24, backgroundColor: "white" }, deleteTitle: { fontSize: 21, fontWeight: "700", color: "#17202e" }, deleteDescription: { fontSize: 14, lineHeight: 22, color: "#627087", marginTop: 12, marginBottom: 20 }, confirmDelete: { minHeight: 48, borderRadius: 14, backgroundColor: "#dc2626", alignItems: "center", justifyContent: "center" }, confirmDeleteText: { fontSize: 14, fontWeight: "700", color: "white" }, cancelDelete: { fontSize: 14, fontWeight: "600", color: "#17202e" },
   successWrap: { position: "absolute", bottom: 20, left: 16, right: 16, alignItems: "center" },
   successBubble: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#e8faf1", borderColor: "#b6ebce", borderWidth: 1, borderRadius: 26, paddingHorizontal: 18, paddingVertical: 14, shadowColor: "#075c38", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
   successCheck: { color: "#05864e", fontSize: 18, fontWeight: "700" },

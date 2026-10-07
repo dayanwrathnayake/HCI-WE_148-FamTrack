@@ -12,16 +12,28 @@ type Account = {
 const AccountContext = createContext<{
   account: Account;
   updateAccount: (account: Account) => void;
+  accountDeleted: boolean;
+  deleteAccount: () => void;
+  createAccount: (name: string, email: string) => void;
 } | undefined>(undefined);
 
 export function AccountProvider({ children }: { children: ReactNode }) {
+  const [accountDeleted, setAccountDeleted] = useState(false);
   const [account, updateAccount] = useState<Account>({
     name: INITIAL_ADMIN.name,
     email: INITIAL_ADMIN.email,
     phone: "+94702149158",
     avatar: INITIAL_ADMIN.avatar,
   });
-  return <AccountContext.Provider value={{ account, updateAccount }}>{children}</AccountContext.Provider>;
+  const deleteAccount = () => {
+    updateAccount({ name: "", email: "", phone: "", avatar: INITIAL_ADMIN.avatar });
+    setAccountDeleted(true);
+  };
+  const createAccount = (name: string, email: string) => {
+    updateAccount({ name, email, phone: "", avatar: INITIAL_ADMIN.avatar });
+    setAccountDeleted(false);
+  };
+  return <AccountContext.Provider value={{ account, updateAccount, accountDeleted, deleteAccount, createAccount }}>{children}</AccountContext.Provider>;
 }
 
 export function useAccount() {

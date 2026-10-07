@@ -17,6 +17,7 @@ import { OrDivider } from "../components/OrDivider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SocialButton } from "../components/SocialButton";
 import { colors } from "../constants/colors";
+import { useAccount } from "../context/AccountContext";
 
 const registerIllustration = require("../assets/auth/register-illustration.png");
 
@@ -24,6 +25,7 @@ const HORIZONTAL_PADDING = 31;
 const ILLUSTRATION_SIZE_RATIO = 221 / 402; // illustration width relative to the Figma reference frame
 
 export default function RegisterScreen() {
+  const { createAccount } = useAccount();
   const [name, setName] = useState("Kamal Perera");
   const [email, setEmail] = useState("kamalperera@gmail.com");
   const [password, setPassword] = useState("");
@@ -32,7 +34,7 @@ export default function RegisterScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const illustrationSize = screenWidth * ILLUSTRATION_SIZE_RATIO;
 
-  const handleCreateAccount = () => router.replace("/(tabs)/home");
+  const handleCreateAccount = () => { createAccount(name.trim(), email.trim()); router.replace("/(tabs)/home"); };
   const handleLogIn = () => router.push("/login");
   const handleGoogleSignUp = () => {};
   const handleAppleSignUp = () => {};

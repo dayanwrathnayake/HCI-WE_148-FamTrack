@@ -16,6 +16,7 @@ import { OrDivider } from "../components/OrDivider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SocialButton } from "../components/SocialButton";
 import { colors } from "../constants/colors";
+import { useAccount } from "../context/AccountContext";
 
 const loginIllustration = require("../assets/auth/login-illustration.png");
 
@@ -23,6 +24,7 @@ const HORIZONTAL_PADDING = 33;
 const ILLUSTRATION_ASPECT_RATIO = 257 / 247;
 
 export default function LoginScreen() {
+  const { accountDeleted } = useAccount();
   const [email, setEmail] = useState("kamalperera@gmail.com");
   const [password, setPassword] = useState("");
 
@@ -30,7 +32,7 @@ export default function LoginScreen() {
   const illustrationWidth = Math.min(257, screenWidth - HORIZONTAL_PADDING * 2 - 40);
   const illustrationHeight = illustrationWidth / ILLUSTRATION_ASPECT_RATIO;
 
-  const handleLogin = () => router.replace("/(tabs)/home");
+  const handleLogin = () => { if (!accountDeleted) router.replace("/(tabs)/home"); };
   const handleSignUp = () => router.push("/register");
   const handleForgotPassword = () => {};
   const handleGoogleLogin = () => {};
@@ -55,6 +57,7 @@ export default function LoginScreen() {
           </View>
 
           <Text className="mt-6 text-[28px] font-bold text-black">Welcome Back 👋</Text>
+          {accountDeleted && <Text accessibilityLiveRegion="polite" style={{ color: "#078653", fontSize: 14, lineHeight: 21, marginTop: 12 }}>Account deleted successfully. Create a new account to continue.</Text>}
           <Text
             className="mt-3 text-center text-[15px] leading-[22px]"
             style={{ color: "#71717a" }}
