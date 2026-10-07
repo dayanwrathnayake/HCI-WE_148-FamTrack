@@ -61,11 +61,6 @@ export default function ProfileScreen() {
               <View style={styles.roleBadge}><Text style={styles.roleText}>Family admin · Perera</Text></View>
             </View>
           </View>
-          <View style={styles.stats}>
-            {[{ label: "This month", value: "Rs 26,400" }, { label: "Members", value: String(INITIAL_GROUP_MEMBERS.length + 1) }, { label: "Streak", value: "12 days" }].map(stat => (
-              <View key={stat.label} style={styles.stat}><Text style={styles.statLabel}>{stat.label}</Text><Text style={styles.statValue}>{stat.value}</Text></View>
-            ))}
-          </View>
         </View>
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ACCOUNT</Text>
@@ -84,8 +79,7 @@ export default function ProfileScreen() {
               <Switch accessibilityLabel="Budget alerts and bill reminders" value={notificationsEnabled} onValueChange={setNotificationsEnabled} trackColor={{ false: "#d9dfe2", true: "#00c878" }} thumbColor="#ffffff" style={styles.toggle} />
             </View>
             <ProfileRow title="Security" subtitle="App lock, biometrics" icon="lock" background="#eaf8ff" onPress={() => showPendingFeature("Security")} />
-            <ProfileRow title="Help Center" subtitle="FAQs and guides" icon="help" background="#ffe9ef" onPress={() => showPendingFeature("Help Center")} />
-            <ProfileRow title="Contact Us" subtitle="We reply within a day" icon="phone" background="#e8f8f1" last onPress={() => showPendingFeature("Contact Us")} />
+            <ProfileRow title="Help Center" subtitle="FAQs and guides" icon="help" background="#ffe9ef" last onPress={() => showPendingFeature("Help Center")} />
           </View>
         </View>
         <Pressable accessibilityRole="button" onPress={() => router.replace("/login")} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>Log out</Text></Pressable>
@@ -120,10 +114,6 @@ const styles = StyleSheet.create({
   email: { fontSize: 12, color: "#a0a0a0", marginTop: 1 },
   roleBadge: { backgroundColor: "#19cda0", alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 11, paddingVertical: 6, marginTop: 8 },
   roleText: { fontSize: 11, fontWeight: "600", color: "#052820" },
-  stats: { flexDirection: "row", gap: 11, marginTop: 18 },
-  stat: { flex: 1, borderWidth: 0.8, borderColor: "#00ce69", borderRadius: 13, paddingHorizontal: 11, paddingVertical: 9 },
-  statLabel: { fontSize: 9, color: "#808080" },
-  statValue: { fontSize: 13, fontWeight: "800", color: "#111111", marginTop: 3 },
   section: { marginTop: 19, marginHorizontal: 9 },
   sectionLabel: { fontSize: 9, fontWeight: "600", letterSpacing: 1, color: "#8491a5", marginLeft: 9, marginBottom: 8 },
   menuCard: { borderRadius: 21, backgroundColor: "white", borderWidth: 1, borderColor: "#e4e4e4", paddingHorizontal: 13, paddingVertical: 3, shadowColor: "#000000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 3 },

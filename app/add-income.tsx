@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Swit
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppBottomNav } from "../components/AppBottomNav";
 import { IncomeHeader } from "../components/IncomeHeader";
+import { DateSelector } from "../components/DateSelector";
 import { INCOME_SOURCES, IncomeSource, localDate, SOURCE_STYLE } from "../constants/income";
 import { useIncome } from "../context/IncomeContext";
 
@@ -13,7 +14,7 @@ export default function AddIncomeScreen() {
   const [source, setSource] = useState<IncomeSource>("Salary");
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(localDate());
-  const [member, setMember] = useState("Kamal");
+  const [member, setMember] = useState("Me");
   const [status, setStatus] = useState<"Received" | "Expected">("Received");
   const [familyBudget, setFamilyBudget] = useState(true);
   const [repeatMonthly, setRepeatMonthly] = useState(false);
@@ -24,7 +25,7 @@ export default function AddIncomeScreen() {
     const parsed = new Date(`${date}T12:00:00`);
     if (!Number.isFinite(numeric) || numeric <= 0) { setError("Enter an amount greater than zero."); return; }
     if (!title.trim()) { setError("Enter an income title."); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || localDate(parsed) !== date) { setError("Enter a valid date in YYYY-MM-DD format."); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || localDate(parsed) !== date) { setError("Select a valid date."); return; }
     addIncome({ amount: numeric, source, title: title.trim(), date, member, status, familyBudget, repeatMonthly });
     router.replace({ pathname: "/income", params: { month: date.slice(0, 7), saved: String(Date.now()) } });
   };
@@ -33,10 +34,10 @@ export default function AddIncomeScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>AMOUNT</Text>
-        <View style={styles.amountField}><Text style={styles.currency}>Rs</Text><TextInput accessibilityLabel="Amount" value={amount} onChangeText={text => setAmount(text.replace(/[^\d.]/g, ""))} placeholder="150,000" placeholderTextColor="#b0b5be" keyboardType="decimal-pad" style={styles.amountInput} maxLength={14} /></View>
+        <View style={styles.amountField}><Text style={styles.currency}>Rs</Text><TextInput accessibilityLabel="Amount" value={amount} onChangeText={text => setAmount(text.replace(/[^\d.]/g, ""))} placeholder="0.00" placeholderTextColor="#b0b5be" keyboardType="decimal-pad" style={styles.amountInput} maxLength={14} /></View>
         <Text style={styles.label}>INCOME SOURCE</Text><View style={styles.chips}>{INCOME_SOURCES.map(item => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: source === item }} onPress={() => setSource(item)} style={[styles.chip, source === item && styles.selected]}><Text style={styles.chipText}>{SOURCE_STYLE[item].symbol} {item}</Text></Pressable>)}</View>
-        <View style={styles.fieldRow}><View style={styles.flex}><Text style={styles.label}>TITLE</Text><TextInput accessibilityLabel="Title" value={title} onChangeText={setTitle} placeholder="Monthly Salary" style={styles.input} maxLength={100} /></View><View style={styles.flex}><Text style={styles.label}>DATE</Text><TextInput accessibilityLabel="Date" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" style={styles.input} maxLength={10} autoCorrect={false} /></View></View>
-        <Text style={styles.label}>RECEIVED BY</Text><View style={styles.members}>{[{ name: "Kamal", initials: "KA", bg: "#ffd795" }, { name: "Mum", initials: "MU", bg: "#ffcde3" }, { name: "Dad", initials: "DA", bg: "#cbe1ff" }].map(item => <Pressable key={item.name} accessibilityRole="button" accessibilityState={{ selected: member === item.name }} onPress={() => setMember(item.name)} style={[styles.member, member === item.name && styles.selected]}><View style={[styles.avatar, { backgroundColor: item.bg }]}><Text style={styles.initials}>{item.initials}</Text></View><Text style={styles.chipText}>{item.name}</Text></Pressable>)}</View>
+        <View style={styles.fieldRow}><View style={styles.flex}><Text style={styles.label}>TITLE</Text><TextInput accessibilityLabel="Title" value={title} onChangeText={setTitle} placeholder="Ex: Monthly Salary" style={styles.input} maxLength={100} /></View><View style={styles.flex}><Text style={styles.label}>DATE</Text><DateSelector value={date} onChange={setDate} /></View></View>
+        <Text style={styles.label}>RECEIVED BY</Text><View style={styles.members}>{[{ name: "Me", initials: "ME", bg: "#ffd795" }, { name: "Mum", initials: "MU", bg: "#ffcde3" }, { name: "Dad", initials: "DA", bg: "#cbe1ff" }].map(item => <Pressable key={item.name} accessibilityRole="button" accessibilityState={{ selected: member === item.name }} onPress={() => setMember(item.name)} style={[styles.member, member === item.name && styles.selected]}><View style={[styles.avatar, { backgroundColor: item.bg }]}><Text style={styles.initials}>{item.initials}</Text></View><Text style={styles.chipText}>{item.name}</Text></Pressable>)}</View>
         <Text style={styles.label}>STATUS</Text><View style={styles.segment}>{(["Received", "Expected"] as const).map(item => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => setStatus(item)} style={[styles.segmentButton, status === item && styles.segmentActive]}><Text style={[styles.segmentText, status === item && styles.segmentSelectedText]}>{item}</Text></Pressable>)}</View>
         <View style={styles.options}>
           <View style={[styles.option, styles.divider]}><View style={[styles.optionIcon, { backgroundColor: "#e8f8f0" }]}><Text>⌂</Text></View><View style={styles.flex}><Text style={styles.optionTitle}>Add to family budget</Text><Text style={styles.optionSubtitle}>Counts towards the shared pool</Text></View><Switch accessibilityLabel="Add to family budget" value={familyBudget} onValueChange={setFamilyBudget} trackColor={{ false: "#d9dfe7", true: "#00c878" }} thumbColor="white" /></View>

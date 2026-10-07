@@ -56,7 +56,7 @@ export function BottomNavBar({ activeRouteName, onNavigate, onAddPress }: Bottom
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Add transaction"
-            onPress={() => activeRouteName === "home" ? setAddMenuVisible(true) : onAddPress?.()}
+            onPress={() => setAddMenuVisible(true)}
             className="h-[46px] w-[46px] items-center justify-center rounded-full"
             style={{
               backgroundColor: "#10b981",
