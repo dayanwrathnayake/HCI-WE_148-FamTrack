@@ -1,4 +1,4 @@
-import type { CategoryId, CategoryShares } from "../types/models";
+import type { CategoryId, CategoryShares, ExpenseCategoryId } from "../types/models";
 
 // The canonical budget categories. Family budgets store a percentage share per CategoryId;
 // "other" is NOT a CategoryId: it is always derived as whatever is left of the 100%.
@@ -44,3 +44,33 @@ export const DEFAULT_CATEGORY_SHARES: CategoryShares = {
   transport: 15,
   bills: 12,
 };
+
+export type ExpenseCategoryDefinition = {
+  id: ExpenseCategoryId;
+  label: string;
+  emoji: string;
+  iconBackground: string;
+  fillColor: string;
+};
+
+/** Every category an expense can have, in the order the pickers show them ("other" last). */
+const EXPENSE_CATEGORY_ORDER: ExpenseCategoryId[] = [
+  "food",
+  "groceries",
+  "shopping",
+  "transport",
+  "bills",
+  "health",
+  "entertainment",
+  "other",
+];
+
+export const EXPENSE_CATEGORIES: ExpenseCategoryDefinition[] = EXPENSE_CATEGORY_ORDER.map((id) =>
+  id === "other" ? OTHER_CATEGORY : getCategoryDefinition(id),
+);
+
+export const isExpenseCategoryId = (value: unknown): value is ExpenseCategoryId =>
+  typeof value === "string" && EXPENSE_CATEGORY_ORDER.includes(value as ExpenseCategoryId);
+
+export const getExpenseCategory = (id: ExpenseCategoryId): ExpenseCategoryDefinition =>
+  EXPENSE_CATEGORIES.find((category) => category.id === id) ?? OTHER_CATEGORY;

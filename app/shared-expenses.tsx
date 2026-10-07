@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AddFamilyMemberModal } from "../components/AddFamilyMemberModal";
@@ -9,7 +9,16 @@ import { AppBottomNav } from "../components/AppBottomNav";
 import { ExpenseActivityRow } from "../components/ExpenseActivityRow";
 import { Icon } from "../components/Icon";
 import { MemberInitialsAvatar } from "../components/MemberInitialsAvatar";
+import { useExpenses } from "../context/ExpenseContext";
 import { useFamily } from "../context/FamilyContext";
+import { getExpenseErrorMessage } from "../services/expenseService";
+import {
+  getContributionPercent,
+  getExpenseCategoryLabel,
+  getSplitText,
+  groupExpensesByDay,
+  type ExpenseRecord,
+} from "../utils/expenses";
 import {
   getAvatarPalette,
   getInitials,
@@ -33,94 +42,31 @@ type MemberData = {
   highlighted?: boolean;
 };
 
-// Members come from the shared family backend (FamilyContext). Amounts, percentages and
-// expense counts are placeholders (Rs 0 / 0% / 0 expenses) until the expense phase.
+// Members and expenses come from the shared backends (FamilyContext and ExpenseContext). Only SHARED
+// expenses count toward contributed amounts and percentages; Pending ones wait for the admin.
 
-const FILTERS = ["All", "Mum", "Dad", "You"] as const;
-type Filter = (typeof FILTERS)[number];
+const ALL_FILTER = "all";
 
-type ExpenseEntry = {
-  initials: string;
-  avatarColor: string;
-  avatarTextColor: string;
-  name: string;
-  subtitle: string;
-  amount: string;
-  statusLabel: "Shared" | "Pending";
-  paidBy: Exclude<Filter, "All">;
-};
-
-const EXPENSE_GROUPS: { label: string; entries: ExpenseEntry[] }[] = [
-  {
-    label: "TODAY",
-    entries: [
-      {
-        initials: "DA",
-        avatarColor: "#cde3ff",
-        avatarTextColor: "#1b4c88",
-        name: "Groceries",
-        subtitle: "Dad · Keells · split 3 ways",
-        amount: "Rs 20,000",
-        statusLabel: "Shared",
-        paidBy: "Dad",
-      },
-      {
-        initials: "MU",
-        avatarColor: "#ffcfe0",
-        avatarTextColor: "#8c2453",
-        name: "Electricity",
-        subtitle: "Mum · CEB bill",
-        amount: "Rs 12,000",
-        statusLabel: "Shared",
-        paidBy: "Mum",
-      },
-    ],
-  },
-  {
-    label: "YESTERDAY",
-    entries: [
-      {
-        initials: "YO",
-        avatarColor: "#ffd8a8",
-        avatarTextColor: "#7a4b00",
-        name: "Transport",
-        subtitle: "You · fuel",
-        amount: "Rs 15,000",
-        statusLabel: "Pending",
-        paidBy: "You",
-      },
-      {
-        initials: "MU",
-        avatarColor: "#ffcfe0",
-        avatarTextColor: "#8c2453",
-        name: "Pharmacy",
-        subtitle: "Mum · health",
-        amount: "Rs 3,250",
-        statusLabel: "Shared",
-        paidBy: "Mum",
-      },
-    ],
-  },
-];
-
-const STATUS_STYLES: Record<ExpenseEntry["statusLabel"], { color: string; background: string }> = {
+const STATUS_STYLES: Record<ExpenseRecord["status"], { color: string; background: string }> = {
   Shared: { color: "#00a85c", background: "#e8f8f0" },
   Pending: { color: "#b4530a", background: "#fff1e6" },
 };
 
 export default function SharedExpensesScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("members");
-  const [filter, setFilter] = useState<Filter>("All");
+  const [filter, setFilter] = useState<string>(ALL_FILTER);
   const [addMemberVisible, setAddMemberVisible] = useState(false);
   const [addExpenseVisible, setAddExpenseVisible] = useState(false);
 
   const { status: familyStatus, family, members, activeMembers, currentMember, isAdmin } = useFamily();
+  const { status: expenseStatus, expenses, totals, approveExpense } = useExpenses();
 
   const memberRows = useMemo<MemberData[]>(
     () =>
       members.map((member) => {
         const isYou = member.id === currentMember?.id;
         const palette = getAvatarPalette(member.id);
+        const paid = totals.byMember[member.id] ?? { amount: 0, count: 0 };
         return {
           key: member.id,
           initials: getInitials(member.displayName),
@@ -128,13 +74,32 @@ export default function SharedExpensesScreen() {
           avatarTextColor: palette.text,
           name: isYou ? "You" : member.displayName,
           roleSuffix: member.status === "active" && member.role === "admin" ? getRoleLabel(member) : undefined,
-          subtitle: getMemberSubtitle(member, isYou),
-          amount: "Rs 0",
-          percent: "0%",
+          subtitle: getMemberSubtitle(member, isYou, paid.count),
+          amount: `Rs ${paid.amount.toLocaleString("en-US")}`,
+          percent: `${getContributionPercent(paid.amount, totals.spent)}%`,
           highlighted: isYou,
         };
       }),
-    [members, currentMember],
+    [members, currentMember, totals],
+  );
+
+  const memberById = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
+  const nameOf = (memberId: string) => {
+    const member = memberById.get(memberId);
+    if (!member) return "Someone";
+    return member.id === currentMember?.id ? "You" : member.displayName;
+  };
+
+  // The chips: everyone, then each member who has joined.
+  const filters = useMemo(
+    () => [
+      { key: ALL_FILTER, label: "All" },
+      ...activeMembers.map((member) => ({
+        key: member.id,
+        label: member.id === currentMember?.id ? "You" : member.displayName.split(" ")[0],
+      })),
+    ],
+    [activeMembers, currentMember],
   );
 
   const handleBack = () => router.back();
@@ -142,12 +107,28 @@ export default function SharedExpensesScreen() {
   const handleSearchPress = () => {};
 
   const visibleGroups = useMemo(() => {
-    if (filter === "All") return EXPENSE_GROUPS;
-    return EXPENSE_GROUPS.map((group) => ({
-      ...group,
-      entries: group.entries.filter((entry) => entry.paidBy === filter),
-    })).filter((group) => group.entries.length > 0);
-  }, [filter]);
+    const filtered = filter === ALL_FILTER ? expenses : expenses.filter((expense) => expense.paidBy === filter);
+    return groupExpensesByDay(filtered);
+  }, [filter, expenses]);
+
+  const handleExpensePress = (expense: ExpenseRecord) => {
+    if (!isAdmin || expense.status !== "Pending") return;
+    Alert.alert(
+      "Approve expense?",
+      `${getExpenseCategoryLabel(expense.categoryId)} · Rs ${expense.amount.toLocaleString("en-US")} paid by ${nameOf(expense.paidBy)}.\n\nApproving adds it to the family's spending.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Approve",
+          onPress: () => {
+            approveExpense(expense.id).catch((error) =>
+              Alert.alert("Couldn't approve", getExpenseErrorMessage(error)),
+            );
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={styles.root}>
@@ -197,7 +178,7 @@ export default function SharedExpensesScreen() {
               <View style={styles.summaryCard}>
                 <View>
                   <Text style={styles.summaryLabel}>Total contributed</Text>
-                  <Text style={styles.summaryValue}>Rs 0</Text>
+                  <Text style={styles.summaryValue}>Rs {totals.spent.toLocaleString("en-US")}</Text>
                 </View>
                 <View style={styles.summaryRight}>
                   <Text style={styles.summaryLabel}>Members</Text>
@@ -263,41 +244,71 @@ export default function SharedExpensesScreen() {
           ) : (
             <>
               <View style={styles.filterRow}>
-                {FILTERS.map((item) => {
-                  const active = filter === item;
+                {filters.map((item) => {
+                  const active = filter === item.key;
                   return (
                     <Pressable
-                      key={item}
-                      onPress={() => setFilter(item)}
+                      key={item.key}
+                      onPress={() => setFilter(item.key)}
                       style={[styles.filterChip, active && styles.filterChipActive]}
                     >
                       <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                        {item}
+                        {item.label}
                       </Text>
                     </Pressable>
                   );
                 })}
               </View>
 
+              {expenseStatus === "loading" || expenseStatus === "idle" ? (
+                <View style={styles.memberStateBox}>
+                  <ActivityIndicator color="#8a93a0" />
+                </View>
+              ) : null}
+              {expenseStatus === "error" ? (
+                <View style={styles.memberStateBox}>
+                  <Text style={styles.memberStateText}>
+                    Couldn&apos;t load this month&apos;s expenses. Please try again later.
+                  </Text>
+                </View>
+              ) : null}
+              {expenseStatus === "ready" && visibleGroups.length === 0 ? (
+                <View style={styles.memberStateBox}>
+                  <Text style={styles.memberStateText}>No expenses yet this month.</Text>
+                </View>
+              ) : null}
+
               {visibleGroups.map((group) => (
                 <View key={group.label} style={styles.expenseGroup}>
-                  <Text style={styles.expenseGroupLabel}>{group.label}</Text>
+                  <Text style={styles.expenseGroupLabel}>{group.label.toUpperCase()}</Text>
                   <View style={styles.expenseCard}>
-                    {group.entries.map((entry, index) => (
-                      <ExpenseActivityRow
-                        key={entry.name}
-                        initials={entry.initials}
-                        avatarColor={entry.avatarColor}
-                        avatarTextColor={entry.avatarTextColor}
-                        name={entry.name}
-                        subtitle={entry.subtitle}
-                        amount={entry.amount}
-                        statusLabel={entry.statusLabel}
-                        statusColor={STATUS_STYLES[entry.statusLabel].color}
-                        statusBackground={STATUS_STYLES[entry.statusLabel].background}
-                        showDivider={index < group.entries.length - 1}
-                      />
-                    ))}
+                    {group.expenses.map((expense, index) => {
+                      const payer = memberById.get(expense.paidBy);
+                      const palette = getAvatarPalette(expense.paidBy);
+                      const details = [nameOf(expense.paidBy), expense.note, getSplitText(expense.splitAmong)]
+                        .filter((part) => part.length > 0)
+                        .join(" · ");
+                      return (
+                        <Pressable
+                          key={expense.id}
+                          onPress={() => handleExpensePress(expense)}
+                          disabled={!isAdmin || expense.status !== "Pending"}
+                        >
+                          <ExpenseActivityRow
+                            initials={getInitials(payer?.displayName ?? "?")}
+                            avatarColor={palette.background}
+                            avatarTextColor={palette.text}
+                            name={getExpenseCategoryLabel(expense.categoryId)}
+                            subtitle={details}
+                            amount={`Rs ${expense.amount.toLocaleString("en-US")}`}
+                            statusLabel={expense.status}
+                            statusColor={STATUS_STYLES[expense.status].color}
+                            statusBackground={STATUS_STYLES[expense.status].background}
+                            showDivider={index < group.expenses.length - 1}
+                          />
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
               ))}

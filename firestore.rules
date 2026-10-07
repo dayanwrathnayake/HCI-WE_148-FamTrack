@@ -16,6 +16,8 @@ rules_version = '2';
 //   familyInvitations/{lowercasedEmail}      - one pending invitation per email address
 //   budgets/{familyId}_{YYYY-MM}             - one budget per family per month (id is enforced);
 //                                              its `categories` map holds each category's % share
+//   expenses/{expenseId}                     - one expense: familyId + monthKey; a member's expense is
+//                                              Pending until the admin approves it (-> Shared)
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -146,6 +148,72 @@ service cloud.firestore {
         && data.membersCanAddExpenses is bool
         && validCategories(data.categories)
         && data.createdBy is string;
+    }
+
+    function budgetPath(familyId, monthKey) {
+      return /databases/$(database)/documents/budgets/$(familyId + '_' + monthKey);
+    }
+
+    // An expense stores its date as the chosen day at 00:00:00 UTC, and `monthKey` must be that
+    // day's month. Dates cannot be in the future and must be in the current month (the checks use
+    // the day before, the day of and the day after the server time, so every time zone works).
+    function validExpenseDate(data) {
+      return data.date is timestamp
+        && data.monthKey is string
+        && data.monthKey == monthKeyOf(data.date)
+        && data.date.hours() == 0
+        && data.date.minutes() == 0
+        && data.date.seconds() == 0
+        && data.date.nanos() == 0
+        && data.date <= request.time + duration.value(1, 'd')
+        && data.monthKey in [
+          monthKeyOf(request.time - duration.value(1, 'd')),
+          monthKeyOf(request.time),
+          monthKeyOf(request.time + duration.value(1, 'd'))
+        ];
+    }
+
+    function validExpenseShape(data) {
+      return data.keys().hasOnly([
+          'familyId', 'monthKey', 'categoryId', 'title', 'amount', 'paidBy', 'splitAmong',
+          'status', 'note', 'date', 'createdBy', 'createdByMember', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'familyId', 'monthKey', 'categoryId', 'title', 'amount', 'paidBy', 'splitAmong',
+          'status', 'note', 'date', 'createdBy', 'createdByMember', 'createdAt'
+        ])
+        && data.familyId is string
+        && data.categoryId in [
+          'food', 'groceries', 'shopping', 'transport', 'bills', 'health', 'entertainment', 'other'
+        ]
+        && isStr(data.title, 1, 100)
+        && data.amount is int && data.amount >= 1 && data.amount <= 100000000
+        && isStr(data.paidBy, 1, 100)
+        && data.splitAmong is list && data.splitAmong.size() >= 1 && data.splitAmong.size() <= 20
+        && data.status in ['Shared', 'Pending']
+        && isStr(data.note, 0, 500)
+        && isStr(data.createdBy, 1, 128)
+        && isStr(data.createdByMember, 1, 100);
+    }
+
+    // Who may create an expense, read from the creator's OWN member document (createdByMember must
+    // belong to the signed-in user):
+    //   - the admin creates it as Shared;
+    //   - a member creates it as Pending, only if their own canAddExpenses is on and this month's
+    //     budget (when one exists) lets members add expenses.
+    function expenseCreatorAllowed(data) {
+      let creator = get(memberPath(data.familyId, data.createdByMember)).data;
+      return creator.userId == request.auth.uid
+        && creator.status == 'active'
+        && (
+          (creator.role == 'admin' && data.status == 'Shared')
+          ||
+          (creator.role == 'member'
+            && data.status == 'Pending'
+            && creator.canAddExpenses == true
+            && (!exists(budgetPath(data.familyId, data.monthKey))
+                || get(budgetPath(data.familyId, data.monthKey)).data.membersCanAddExpenses == true))
+        );
     }
 
     // ---------- users ----------
@@ -300,6 +368,30 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses', 'categories'])
         && validBudgetShape(request.resource.data);
+    }
+
+    // ---------- expenses ----------
+    // One document per expense. No delete and no editing: the only change allowed is the admin
+    // approving a Pending expense (Pending -> Shared). Reading needs the query to filter by familyId.
+    match /expenses/{expenseId} {
+      allow get, list: if isMemberOf(resource.data.familyId);
+
+      allow create: if signedIn()
+        && validExpenseShape(request.resource.data)
+        && isMemberOf(request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && validExpenseDate(request.resource.data)
+        // The person who paid must be an active member of the SAME family.
+        && get(memberPath(request.resource.data.familyId, request.resource.data.paidBy)).data.status == 'active'
+        && expenseCreatorAllowed(request.resource.data);
+
+      // Admin approval only: Pending -> Shared, and nothing else may change.
+      allow update: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && resource.data.status == 'Pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'Shared';
     }
   }
 }

@@ -1,88 +1,170 @@
-import React, { createContext, useContext, useState } from "react";
 import {
-  HistoryItem,
-  MOCK_HISTORY_GROUPS,
-  CATEGORY_ICONS,
-} from "../constants/history";
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
-export type NewExpenseInput = {
-  title: string;
-  category: "Food" | "Utilities" | "Transport" | "Housing" | "Bills" | "Rent";
-  amount: number;
-  date?: string;
-  payerText: string;
-  note?: string;
-  receiptUri?: string | null;
-  status?: "Shared" | "Personal" | "Pending";
-  iconEmoji?: string;
-  iconBg?: string;
+import {
+  addExpense as addExpenseDocument,
+  approveExpense as approveExpenseDocument,
+  getMonthSpent,
+  subscribeToExpenses,
+} from "../services/expenseService";
+import type { ExpenseCategoryId, ExpenseStatus } from "../types/models";
+import { getPreviousMonthKey } from "../utils/budget";
+import {
+  computeTotals,
+  getAddPermission,
+  type AddPermission,
+  type ExpenseRecord,
+  type ExpenseTotals,
+} from "../utils/expenses";
+import { useAuth } from "./AuthContext";
+import { useBudget } from "./BudgetContext";
+import { useFamily } from "./FamilyContext";
+
+// The ONE source of truth for the family's expenses in the CURRENT month:
+//   Firestore expenses (familyId + monthKey)  ->  expenseService  ->  this context
+// + Add Expense, Add Shared Expense, Shared Expenses, Expense History, the Family Budget and Category
+// Budget spent amounts and the member contributions all read from here.
+//
+// Only SHARED expenses count as spending. Pending expenses (a member's, waiting for the admin) are in
+// `expenses` so lists can show them with a Pending badge, but they are never part of `totals`.
+
+/**
+ * idle     - not signed in or no family yet
+ * loading  - waiting for this month's expenses
+ * ready    - loaded (the month may have none)
+ * error    - the listener failed
+ */
+export type ExpenseStatusState = "idle" | "loading" | "ready" | "error";
+
+export type AddExpenseValues = {
+  categoryId: ExpenseCategoryId;
+  /** Raw text from the amount field, e.g. "20,000". */
+  amountText: string;
+  /** Raw DD/MM/YY text. */
+  dateText: string;
+  /** memberId who paid; null means the signed-in user. */
+  paidBy: string | null;
+  /** memberIds to split between; empty means every active member. */
+  splitAmong: string[];
+  note: string;
 };
 
-type ExpenseContextType = {
-  historyGroups: typeof MOCK_HISTORY_GROUPS;
-  totalSpent: number;
-  addExpense: (expense: NewExpenseInput) => void;
+type ExpenseContextValue = {
+  status: ExpenseStatusState;
+  /** This month's expenses, shared and pending, newest first. */
+  expenses: ExpenseRecord[];
+  /** Totals over SHARED expenses only. */
+  totals: ExpenseTotals;
+  /** Whether the signed-in user may add an expense now, and whether it will need approval. */
+  permission: AddPermission;
+  addExpense: (values: AddExpenseValues) => Promise<{ id: string; status: ExpenseStatus }>;
+  /** Admin only: Pending -> Shared. */
+  approveExpense: (expenseId: string) => Promise<void>;
+  /** Last month's SHARED spending, or null if it couldn't be read. */
+  loadPreviousMonthSpent: () => Promise<number | null>;
 };
 
-const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
+type Loaded = {
+  key: string | null;
+  expenses: ExpenseRecord[];
+  state: "loading" | "ready" | "error";
+};
 
-export function ExpenseProvider({ children }: { children: React.ReactNode }) {
-  const [historyGroups, setHistoryGroups] = useState(MOCK_HISTORY_GROUPS);
+const EMPTY: Loaded = { key: null, expenses: [], state: "loading" };
+const NO_EXPENSES: ExpenseRecord[] = [];
 
-  const totalSpent = historyGroups.reduce((total, group) => {
-    return total + group.items.reduce((sum, item) => sum + item.amount, 0);
-  }, 0);
+const ExpenseContext = createContext<ExpenseContextValue | undefined>(undefined);
 
-  const addExpense = (input: NewExpenseInput) => {
-    const iconConfig = CATEGORY_ICONS[input.category] || {
-      emoji: input.iconEmoji || "💸",
-      bg: input.iconBg || "#10b981",
-    };
+export function ExpenseProvider({ children }: { children: ReactNode }) {
+  const { user, isSignedIn } = useAuth();
+  const { family, activeMembers, currentMember, isAdmin } = useFamily();
+  const { budget, monthKey } = useBudget();
 
-    const newItem: HistoryItem = {
-      id: Date.now().toString(),
-      title: input.title,
-      category: input.category,
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      payerText: input.payerText || "Paid by you",
-      amount: input.amount,
-      status: input.status || "Shared",
-      iconBg: iconConfig.bg,
-      iconEmoji: iconConfig.emoji,
-    };
+  const uid = isSignedIn && user ? user.uid : null;
+  const familyId = uid ? (family?.id ?? null) : null;
+  // Everything loaded below belongs to exactly one (user, family, month).
+  const key = uid && familyId ? `${uid}:${familyId}:${monthKey}` : null;
 
-    setHistoryGroups((prevGroups) => {
-      const todayGroupIndex = prevGroups.findIndex(
-        (g) => g.dateLabel === "Today",
-      );
+  const [loaded, setLoaded] = useState<Loaded>(EMPTY);
 
-      if (todayGroupIndex >= 0) {
-        const updated = [...prevGroups];
-        updated[todayGroupIndex] = {
-          ...updated[todayGroupIndex],
-          items: [newItem, ...updated[todayGroupIndex].items],
-        };
-        return updated;
-      } else {
-        return [{ dateLabel: "Today", items: [newItem] }, ...prevGroups];
-      }
+  useEffect(() => {
+    if (!key || !familyId) {
+      setLoaded(EMPTY);
+      return;
+    }
+
+    setLoaded({ ...EMPTY, key });
+    const unsubscribe = subscribeToExpenses(familyId, monthKey, (event) => {
+      setLoaded((prev) => {
+        if (prev.key !== key) return prev; // a newer user/family/month is already active
+        if (event.status === "ready") return { key, expenses: event.expenses, state: "ready" };
+        console.warn("[expenses] expense listener failed", event.error);
+        return { key, expenses: [], state: "error" };
+      });
     });
-  };
 
-  return (
-    <ExpenseContext.Provider value={{ historyGroups, totalSpent, addExpense }}>
-      {children}
-    </ExpenseContext.Provider>
+    return unsubscribe;
+  }, [key, familyId, monthKey]);
+
+  // Only data that belongs to the CURRENT user+family+month is exposed, so a previous account's
+  // expenses can never appear, not even for one render while switching.
+  const current = loaded.key === key ? loaded : EMPTY;
+  const status: ExpenseStatusState = !key ? "idle" : current.state;
+  const expenses = key ? current.expenses : NO_EXPENSES;
+
+  const totals = useMemo(() => computeTotals(expenses), [expenses]);
+  const permission = useMemo(
+    () => getAddPermission({ isAdmin, member: currentMember, budget }),
+    [isAdmin, currentMember, budget],
   );
+
+  const addExpense = useCallback(
+    (values: AddExpenseValues) => {
+      if (!uid || !familyId) {
+        return Promise.reject(new Error("Your family hasn't loaded yet. Please try again."));
+      }
+      return addExpenseDocument({
+        familyId,
+        uid,
+        member: currentMember,
+        isAdmin,
+        budget,
+        activeMembers,
+        ...values,
+      });
+    },
+    [uid, familyId, currentMember, isAdmin, budget, activeMembers],
+  );
+
+  const approveExpense = useCallback(
+    (expenseId: string) => approveExpenseDocument({ expenseId, isAdmin }),
+    [isAdmin],
+  );
+
+  const loadPreviousMonthSpent = useCallback(
+    async () => (familyId ? getMonthSpent(familyId, getPreviousMonthKey(monthKey)) : null),
+    [familyId, monthKey],
+  );
+
+  const value = useMemo<ExpenseContextValue>(
+    () => ({ status, expenses, totals, permission, addExpense, approveExpense, loadPreviousMonthSpent }),
+    [status, expenses, totals, permission, addExpense, approveExpense, loadPreviousMonthSpent],
+  );
+
+  return <ExpenseContext.Provider value={value}>{children}</ExpenseContext.Provider>;
 }
 
-export function useExpenses() {
-  const context = useContext(ExpenseContext);
-  if (!context) {
+export function useExpenses(): ExpenseContextValue {
+  const value = useContext(ExpenseContext);
+  if (!value) {
     throw new Error("useExpenses must be used within an ExpenseProvider");
   }
-  return context;
+  return value;
 }

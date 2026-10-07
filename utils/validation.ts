@@ -62,6 +62,29 @@ export function validateBudgetAmount(text: string): string | null {
   return null;
 }
 
+export const MAX_EXPENSE_AMOUNT = 100_000_000; // keep in sync with firestore.rules
+export const MAX_EXPENSE_NOTE_LENGTH = 500; // keep in sync with firestore.rules
+
+/** The amount is typed as text ("20,000"); expenses are whole rupees. */
+export function validateExpenseAmount(text: string): string | null {
+  const digits = text.replace(/[,\s]/g, "");
+  if (digits.length === 0) return "Please enter the amount.";
+  if (!/^\d+$/.test(digits)) return "Enter the amount as a whole number of rupees.";
+  const value = Number(digits);
+  if (value < 1) return "The amount must be greater than Rs 0.";
+  if (value > MAX_EXPENSE_AMOUNT) {
+    return `The amount can't be more than Rs ${MAX_EXPENSE_AMOUNT.toLocaleString("en-US")}.`;
+  }
+  return null;
+}
+
+export function validateExpenseNote(note: string): string | null {
+  if (note.length > MAX_EXPENSE_NOTE_LENGTH) {
+    return `The note must be ${MAX_EXPENSE_NOTE_LENGTH} characters or fewer.`;
+  }
+  return null;
+}
+
 /** Login only needs a password to be present; Firebase decides whether it is correct. */
 export function validateLoginPassword(password: string): string | null {
   return password.length === 0 ? "Please enter your password." : null;

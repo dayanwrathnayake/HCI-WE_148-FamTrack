@@ -7,13 +7,13 @@ import { Icon } from "../../components/Icon";
 import { MemberInitialsAvatar } from "../../components/MemberInitialsAvatar";
 import { ProgressBar } from "../../components/ProgressBar";
 import { SharedActivityRow } from "../../components/SharedActivityRow";
+import { getExpenseCategory } from "../../constants/categories";
 import { useBudget } from "../../context/BudgetContext";
+import { useExpenses } from "../../context/ExpenseContext";
 import { useFamily } from "../../context/FamilyContext";
 import { getBudgetStanding, type BudgetStanding } from "../../utils/budget";
+import { getContributionPercent, getSplitText } from "../../utils/expenses";
 import { getAvatarPalette, getInitials, getMonthYearLabel } from "../../utils/members";
-
-// Nothing is spent until the expense phase provides real totals.
-const MONTHLY_SPENT = 0;
 
 const STANDING_LABEL: Record<BudgetStanding, string> = {
   "not-set": "Not set",
@@ -33,46 +33,24 @@ type MemberData = {
   progressColor: string;
 };
 
-// Members come from the shared family backend (FamilyContext). Spent amounts and progress are
-// placeholders (Rs 0 / empty bar) until the expense phase provides real calculations.
-
-type ActivityData = {
-  emoji: string;
-  iconBackground: string;
-  name: string;
-  subtitle: string;
-  amount: string;
-};
-
-const SHARED_ACTIVITY: ActivityData[] = [
-  {
-    emoji: "🛒",
-    iconBackground: "#e8f8f0",
-    name: "Keells groceries",
-    subtitle: "Kavi · split 4 ways",
-    amount: "Rs 8,450",
-  },
-  {
-    emoji: "💡",
-    iconBackground: "#fff1e6",
-    name: "CEB electricity",
-    subtitle: "Dayan · shared bill",
-    amount: "Rs 5,650",
-  },
-];
+// Members come from the shared family backend (FamilyContext); spending comes from the shared
+// expense backend (ExpenseContext). Only SHARED expenses count; Pending ones wait for the admin.
 
 export default function FamilyBudgetScreen() {
-  const { status: familyStatus, family, members, isAdmin } = useFamily();
+  const { status: familyStatus, family, members, currentMember, isAdmin } = useFamily();
   const { status: budgetStatus, budget } = useBudget();
+  const { expenses, totals } = useExpenses();
 
+  const monthlySpent = totals.spent;
   const monthlyBudget = budget?.amount ?? 0;
-  const monthlyLeft = monthlyBudget - MONTHLY_SPENT;
+  // Never negative: with no budget, or once it is overspent, the badge says so and Left stays at 0.
+  const monthlyLeft = Math.max(0, monthlyBudget - monthlySpent);
   const badgeText =
     budgetStatus === "loading" || budgetStatus === "idle"
       ? "Loading"
       : budgetStatus === "error"
         ? "Unavailable"
-        : STANDING_LABEL[getBudgetStanding(budget, MONTHLY_SPENT)];
+        : STANDING_LABEL[getBudgetStanding(budget, monthlySpent)];
   const budgetHint =
     budgetStatus === "none"
       ? isAdmin
@@ -86,6 +64,7 @@ export default function FamilyBudgetScreen() {
     () =>
       members.map((member) => {
         const palette = getAvatarPalette(member.id);
+        const paid = totals.byMember[member.id]?.amount ?? 0;
         return {
           key: member.id,
           initials: getInitials(member.displayName),
@@ -93,12 +72,34 @@ export default function FamilyBudgetScreen() {
           avatarTextColor: palette.text,
           name: member.displayName,
           role: member.status === "pending" ? "Pending" : member.role === "admin" ? "Admin" : "Member",
-          spentAmount: "Rs 0",
-          progress: 0,
+          spentAmount: `Rs ${paid.toLocaleString("en-US")}`,
+          progress: getContributionPercent(paid, totals.spent) / 100,
           progressColor: palette.progress,
         };
       }),
-    [members],
+    [members, totals],
+  );
+
+  // The two most recent SHARED expenses.
+  const recentActivity = useMemo(
+    () =>
+      expenses
+        .filter((expense) => expense.status === "Shared")
+        .slice(0, 2)
+        .map((expense) => {
+          const category = getExpenseCategory(expense.categoryId);
+          const payer = members.find((member) => member.id === expense.paidBy);
+          const payerName = !payer ? "Someone" : payer.id === currentMember?.id ? "You" : payer.displayName;
+          return {
+            id: expense.id,
+            emoji: category.emoji,
+            iconBackground: category.iconBackground,
+            name: category.label,
+            subtitle: [payerName, getSplitText(expense.splitAmong)].filter((part) => part.length > 0).join(" · "),
+            amount: `Rs ${expense.amount.toLocaleString("en-US")}`,
+          };
+        }),
+    [expenses, members, currentMember],
   );
 
   const handleBack = () => router.back();
@@ -110,8 +111,7 @@ export default function FamilyBudgetScreen() {
   const handleViewReport = () => {};
   const handleCategoryBudgets = () => router.push("/category-budget");
 
-  // TODO: build the full Shared Expenses list screen.
-  const handleSeeAllActivity = () => {};
+  const handleSeeAllActivity = () => router.push("/expense-history");
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -146,7 +146,7 @@ export default function FamilyBudgetScreen() {
             Rs {monthlyBudget.toLocaleString("en-US")}
           </Text>
           <ProgressBar
-            progress={monthlyBudget > 0 ? MONTHLY_SPENT / monthlyBudget : 0}
+            progress={monthlyBudget > 0 ? monthlySpent / monthlyBudget : 0}
             height={8}
             trackColor="rgba(255,255,255,0.14)"
             fillColor="#00c46a"
@@ -156,7 +156,7 @@ export default function FamilyBudgetScreen() {
             <Text style={styles.monthlyFooterText}>
               Spent{" "}
               <Text style={styles.monthlyFooterBold}>
-                Rs {MONTHLY_SPENT.toLocaleString("en-US")}
+                Rs {monthlySpent.toLocaleString("en-US")}
               </Text>
             </Text>
             <Text style={styles.monthlyFooterText}>
@@ -279,17 +279,20 @@ export default function FamilyBudgetScreen() {
         </View>
 
         <View style={styles.activityCard}>
-          {SHARED_ACTIVITY.map((activity, index) => (
+          {recentActivity.map((activity, index) => (
             <SharedActivityRow
-              key={activity.name}
+              key={activity.id}
               emoji={activity.emoji}
               iconBackground={activity.iconBackground}
               name={activity.name}
               subtitle={activity.subtitle}
               amount={activity.amount}
-              showDivider={index < SHARED_ACTIVITY.length - 1}
+              showDivider={index < recentActivity.length - 1}
             />
           ))}
+          {recentActivity.length === 0 ? (
+            <Text style={styles.activityEmptyText}>No shared expenses yet this month.</Text>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -300,6 +303,12 @@ const styles = StyleSheet.create({
   membersStateBox: {
     alignItems: "center",
     paddingVertical: 8,
+  },
+  activityEmptyText: {
+    paddingVertical: 14,
+    fontSize: 12.5,
+    color: "#8a93a0",
+    textAlign: "center",
   },
   membersStateText: {
     fontSize: 12.5,

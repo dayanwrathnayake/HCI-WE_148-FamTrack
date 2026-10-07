@@ -7,20 +7,25 @@ import { AppBottomNav } from "../components/AppBottomNav";
 import { CircularProgressRing } from "../components/CircularProgressRing";
 import { Icon } from "../components/Icon";
 import { DEFAULT_CATEGORY_SHARES } from "../constants/categories";
+import type { CategoryId } from "../types/models";
 import { useBudget } from "../context/BudgetContext";
+import { useExpenses } from "../context/ExpenseContext";
+import { DEFAULT_ALERT_PERCENTAGE } from "../utils/budget";
 import { getCategoryAllocations } from "../utils/categories";
+import { getCategorySpent } from "../utils/expenses";
 import { getMonthYearLabel } from "../utils/members";
-
-// Nothing is spent until the expense phase provides real totals (overall and per category).
-const MONTHLY_SPENT = 0;
-const CATEGORY_SPENT = 0;
 
 export default function CategoryBudgetScreen() {
   const { status, budget, monthKey } = useBudget();
+  const { totals } = useExpenses();
 
+  // Only SHARED expenses count; Pending ones wait for the admin.
+  const monthlySpent = totals.spent;
   const monthlyBudget = budget?.amount ?? 0;
-  const monthlyLeft = monthlyBudget - MONTHLY_SPENT;
-  const percentUsed = monthlyBudget > 0 ? MONTHLY_SPENT / monthlyBudget : 0;
+  // Never negative: with no budget, or once it is overspent, Left stays at 0.
+  const monthlyLeft = Math.max(0, monthlyBudget - monthlySpent);
+  const percentUsed = monthlyBudget > 0 ? monthlySpent / monthlyBudget : 0;
+  const alertFraction = (budget?.alertPercentage ?? DEFAULT_ALERT_PERCENTAGE) / 100;
 
   // Rupee allocations are derived from the saved percentages; "Other" is the remainder, so the rows
   // always total exactly the monthly budget.
@@ -71,7 +76,7 @@ export default function CategoryBudgetScreen() {
                 <View style={[styles.summaryStat, { backgroundColor: "#f4f6f8" }]}>
                   <Text style={[styles.summaryStatLabel, { color: "#8a93a0" }]}>Spent</Text>
                   <Text style={[styles.summaryStatValue, { color: "#0e1116" }]}>
-                    Rs {MONTHLY_SPENT.toLocaleString("en-US")}
+                    Rs {monthlySpent.toLocaleString("en-US")}
                   </Text>
                 </View>
                 <View style={[styles.summaryStat, { backgroundColor: "#e8f8f0" }]}>
@@ -92,33 +97,41 @@ export default function CategoryBudgetScreen() {
           </View>
 
           <View style={styles.categoryList}>
-            {allocations.map((category) => (
-              <View key={category.id} style={styles.categoryCard}>
-                <View style={[styles.categoryIconWrap, { backgroundColor: category.iconBackground }]}>
-                  <Text style={styles.categoryEmoji}>{category.emoji}</Text>
-                </View>
-                <View style={styles.categoryBody}>
-                  <View style={styles.categoryTopRow}>
-                    <Text style={styles.categoryName}>{category.label}</Text>
-                    <Text style={styles.categoryPercent}>{category.percentage}%</Text>
+            {allocations.map((category) => {
+              // "Other" also holds spending in categories that have no share of their own.
+              const spent = getCategorySpent(
+                totals.byCategory,
+                category.id,
+                allocations.filter((row) => row.id !== "other").map((row) => row.id as CategoryId),
+              );
+              const ratio = category.amount > 0 ? spent / category.amount : spent > 0 ? 1 : 0;
+              const warning = ratio >= 1 ? " · over limit" : ratio >= alertFraction ? " · near limit" : "";
+              return (
+                <View key={category.id} style={styles.categoryCard}>
+                  <View style={[styles.categoryIconWrap, { backgroundColor: category.iconBackground }]}>
+                    <Text style={styles.categoryEmoji}>{category.emoji}</Text>
                   </View>
-                  <View style={styles.categoryTrack}>
-                    <View
-                      style={[
-                        styles.categoryFill,
-                        {
-                          width: `${(category.amount > 0 ? Math.min(1, CATEGORY_SPENT / category.amount) : 0) * 100}%`,
-                          backgroundColor: category.fillColor,
-                        },
-                      ]}
-                    />
+                  <View style={styles.categoryBody}>
+                    <View style={styles.categoryTopRow}>
+                      <Text style={styles.categoryName}>{category.label}</Text>
+                      <Text style={styles.categoryPercent}>{category.percentage}%</Text>
+                    </View>
+                    <View style={styles.categoryTrack}>
+                      <View
+                        style={[
+                          styles.categoryFill,
+                          { width: `${Math.min(1, ratio) * 100}%`, backgroundColor: category.fillColor },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.categoryDetail, warning !== "" && styles.categoryDetailWarning]}>
+                      Rs {spent.toLocaleString("en-US")} of Rs {category.amount.toLocaleString("en-US")}
+                      {warning}
+                    </Text>
                   </View>
-                  <Text style={styles.categoryDetail}>
-                    Rs {CATEGORY_SPENT.toLocaleString("en-US")} of Rs {category.amount.toLocaleString("en-US")}
-                  </Text>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </ScrollView>
 
@@ -297,6 +310,9 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: "400",
     color: "#8a93a0",
+  },
+  categoryDetailWarning: {
+    color: "#c2410c",
   },
   editBudgetWrap: {
     paddingHorizontal: 20,

@@ -83,18 +83,27 @@ export type Budget = {
   createdBy: string; // uid
 };
 
-/** expenses/{expenseId} */
+/** An expense's category: any budget category, or "other" (which is never given a budget share). */
+export type ExpenseCategoryId = CategoryId | "other";
+
+/**
+ * expenses/{expenseId}. The month's budget is always `{familyId}_{monthKey}`, so no budgetId is
+ * stored. Spent totals, per-category and per-member totals and each person's equal share are
+ * derived from these records, never stored.
+ */
 export type Expense = {
   familyId: string;
-  budgetId: string;
-  categoryId: string;
-  title: string;
+  monthKey: string; // "YYYY-MM", derived from `date`
+  categoryId: ExpenseCategoryId;
+  title: string; // the category's label unless a screen has a title field
   amount: number; // integer rupees
   paidBy: string; // memberId (members may not have an account)
-  splitAmong: string[]; // memberIds
-  status: ExpenseStatus;
+  splitAmong: string[]; // memberIds, shared equally
+  status: ExpenseStatus; // "Pending" until the admin approves; only "Shared" counts as spending
+  note: string; // free text, may be empty
+  date: Timestamp; // the chosen day at 00:00:00 UTC
   createdBy: string; // uid
-  date: Timestamp;
+  createdByMember: string; // memberId of the creator
   createdAt: Timestamp;
 };
 

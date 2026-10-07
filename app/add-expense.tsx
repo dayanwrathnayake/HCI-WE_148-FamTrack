@@ -1,34 +1,58 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
 import { ReceiptPicker } from "../components/ReceiptPicker";
+import { EXPENSE_CATEGORIES, type ExpenseCategoryDefinition } from "../constants/categories";
+import type { SelectableMember } from "../constants/expense";
 import { useExpenses } from "../context/ExpenseContext";
-import {
-  ALL_MEMBERS,
-  CATEGORIES,
-  CategoryOption,
-  Member,
-} from "../constants/expense";
+import { useFamily } from "../context/FamilyContext";
+import { getExpenseErrorMessage } from "../services/expenseService";
+import { formatExpenseDate } from "../utils/expenses";
+import { getAvatarPalette, getInitials } from "../utils/members";
 
 export default function AddExpenseScreen() {
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(() => formatExpenseDate(new Date()));
   const [note, setNote] = useState("");
-  const { addExpense } = useExpenses();
+  const { addExpense, permission } = useExpenses();
+  const { activeMembers, currentMember } = useFamily();
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
 
   const [selectedCategory, setSelectedCategory] =
-    useState<CategoryOption | null>(null);
+    useState<ExpenseCategoryDefinition | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  const [payers, setPayers] = useState<Member[]>([]);
-  const [splitMembers, setSplitMembers] = useState<Member[]>([]);
+  // Real family members, shown with initials like the rest of the app.
+  const memberOptions = useMemo<SelectableMember[]>(
+    () =>
+      activeMembers.map((member) => {
+        const palette = getAvatarPalette(member.id);
+        return {
+          key: member.id,
+          name: member.id === currentMember?.id ? "You" : member.displayName,
+          initials: getInitials(member.displayName),
+          avatarColor: palette.background,
+          avatarTextColor: palette.text,
+        };
+      }),
+    [activeMembers, currentMember],
+  );
+
+  // One payer only: picking another replaces the first. Nobody picked means the signed-in user.
+  const [payers, setPayers] = useState<SelectableMember[]>([]);
+  const [splitMembers, setSplitMembers] = useState<SelectableMember[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
   const isValid =
-    amount.trim().length > 0 && Number(amount) > 0 && selectedCategory !== null;
+    amount.trim().length > 0 &&
+    Number(amount.replace(/,/g, "")) > 0 &&
+    selectedCategory !== null &&
+    permission.allowed &&
+    !saving;
 
   const handleAmountChange = (text: string) => {
     const rawNumber = text.replace(/[^0-9]/g, "");
@@ -66,27 +90,26 @@ export default function AddExpenseScreen() {
     }
   };
 
-  const handleAddExpense = () => {
+  const handleAddExpense = async () => {
     if (!isValid || !selectedCategory) return;
-
-    const payerName =
-      payers.length > 0
-        ? `Paid by ${payers.map((p) => p.name.toLowerCase()).join(", ")}`
-        : "Paid by you";
-
-    addExpense({
-      title: note.trim() !== "" ? note.trim() : selectedCategory.label,
-      category: selectedCategory.label as any,
-      amount: Number(amount.replace(/,/g, "")),
-      date: date || "Today",
-      payerText: payerName,
-      note: note,
-      receiptUri: receiptUri,
-      status: splitMembers.length > 0 ? "Shared" : "Personal",
-      iconEmoji: selectedCategory.emoji,
-    });
-
-    handleBack();
+    setErrorText(null);
+    setSaving(true);
+    try {
+      // Everything goes through the ONE expense backend (ExpenseContext -> expenseService).
+      await addExpense({
+        categoryId: selectedCategory.id,
+        amountText: amount,
+        dateText: date,
+        paidBy: payers[0]?.key ?? null,
+        splitAmong: splitMembers.map((member) => member.key),
+        note,
+      });
+      handleBack();
+    } catch (error) {
+      setErrorText(getExpenseErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -111,6 +134,16 @@ export default function AddExpenseScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {!permission.allowed ? (
+          <Text className="text-[12.5px] font-medium text-[#c2410c] text-center">
+            {permission.reason}
+          </Text>
+        ) : permission.pending ? (
+          <Text className="text-[12.5px] font-medium text-[#8a93a0] text-center">
+            Your expense will be sent to the family admin for approval.
+          </Text>
+        ) : null}
+
         <View className="bg-white rounded-[20px] p-5 shadow-sm shadow-black/10 elevation-2">
           <Text className="text-[13px] font-semibold text-[#111827] mb-2">
             Expense Title
@@ -140,12 +173,12 @@ export default function AddExpenseScreen() {
 
           {showCategoryPicker && (
             <View className="flex-row flex-wrap gap-2 mt-3">
-              {CATEGORIES.map((cat) => {
-                const active = cat.key === selectedCategory?.key;
+              {EXPENSE_CATEGORIES.map((cat) => {
+                const active = cat.id === selectedCategory?.id;
 
                 return (
                   <Pressable
-                    key={cat.key}
+                    key={cat.id}
                     onPress={() => {
                       setSelectedCategory(cat);
                       setShowCategoryPicker(false);
@@ -214,19 +247,22 @@ export default function AddExpenseScreen() {
           <MemberSelector
             label="Payer"
             selectedMembers={payers}
-            allMembers={ALL_MEMBERS}
-            onAdd={(m) => setPayers((p) => [...p, m])}
+            allMembers={memberOptions}
+            onAdd={(m) => setPayers([m])}
             onRemove={(k) => setPayers((p) => p.filter((x) => x.key !== k))}
           />
           <MemberSelector
             label="Split between"
             selectedMembers={splitMembers}
-            allMembers={ALL_MEMBERS}
+            allMembers={memberOptions}
             onAdd={(m) => setSplitMembers((s) => [...s, m])}
             onRemove={(k) =>
               setSplitMembers((s) => s.filter((x) => x.key !== k))
             }
           />
+          <Text className="text-[11.5px] text-[#8a93a0] mt-2">
+            Payer defaults to you. Split defaults to everyone in the family.
+          </Text>
 
           <Text className="text-[13px] font-semibold text-[#111827] mt-4 mb-2">
             Note
@@ -247,6 +283,15 @@ export default function AddExpenseScreen() {
           onSelectReceipt={(uri) => setReceiptUri(uri)}
           onRemoveReceipt={() => setReceiptUri(null)}
         />
+        {receiptUri ? (
+          <Text className="text-[12px] font-medium text-[#8a93a0] text-center -mt-2">
+            Receipts aren&apos;t saved yet. This photo won&apos;t be uploaded with the expense.
+          </Text>
+        ) : null}
+
+        {errorText ? (
+          <Text className="text-[12.5px] font-medium text-[#c2410c] text-center">{errorText}</Text>
+        ) : null}
 
         <View className="flex-row gap-3">
           <Pressable
