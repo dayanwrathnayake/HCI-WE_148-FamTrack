@@ -1,10 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "./Icon";
 import { colors } from "../constants/colors";
 import type { IconName } from "../constants/icons";
+import { AddTransactionSheet } from "./AddTransactionSheet";
 
 type TabItem = {
   routeName: string;
@@ -32,6 +34,7 @@ type BottomNavBarProps = {
 };
 
 export function BottomNavBar({ activeRouteName, onNavigate, onAddPress }: BottomNavBarProps) {
+  const [addMenuVisible, setAddMenuVisible] = useState(false);
   const leftItems = TAB_ITEMS.slice(0, 2);
   const rightItems = TAB_ITEMS.slice(2);
 
@@ -50,7 +53,9 @@ export function BottomNavBar({ activeRouteName, onNavigate, onAddPress }: Bottom
 
         <View style={{ flex: 1, alignItems: "center" }}>
           <Pressable
-            onPress={onAddPress}
+            accessibilityRole="button"
+            accessibilityLabel="Add transaction"
+            onPress={() => activeRouteName === "home" ? setAddMenuVisible(true) : onAddPress?.()}
             className="h-[46px] w-[46px] items-center justify-center rounded-full"
             style={{
               backgroundColor: "#10b981",
@@ -75,6 +80,12 @@ export function BottomNavBar({ activeRouteName, onNavigate, onAddPress }: Bottom
           </View>
         ))}
       </View>
+      <AddTransactionSheet
+        visible={addMenuVisible}
+        onClose={() => setAddMenuVisible(false)}
+        onExpense={() => onAddPress?.()}
+        onIncome={() => Alert.alert("Add Income", "The income entry page is not available yet.")}
+      />
     </SafeAreaView>
   );
 }

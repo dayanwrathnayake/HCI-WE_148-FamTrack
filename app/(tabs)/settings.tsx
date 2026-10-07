@@ -1,5 +1,5 @@
-import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
@@ -32,6 +32,15 @@ function ProfileRow({ title, subtitle, icon, background, onPress, badge, last }:
 }
 export default function ProfileScreen() {
   const { account } = useAccount();
+  const { accountUpdated } = useLocalSearchParams<{ accountUpdated?: string }>();
+  const showSuccess = !!accountUpdated;
+  useEffect(() => {
+    if (!accountUpdated) return;
+    const timeout = setTimeout(() => {
+      router.setParams({ accountUpdated: undefined });
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [accountUpdated]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const scrollRef = useRef<ScrollView>(null);
   const [preferencesY, setPreferencesY] = useState(0);
@@ -81,10 +90,22 @@ export default function ProfileScreen() {
         </View>
         <Pressable accessibilityRole="button" onPress={() => router.replace("/login")} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>Log out</Text></Pressable>
       </ScrollView>
+      {showSuccess && (
+        <View pointerEvents="none" style={styles.successWrap}>
+          <View style={styles.successBubble}>
+            <Text style={styles.successCheck}>✓</Text>
+            <Text accessibilityLiveRegion="polite" style={styles.successText}>Account updated successfully</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 const styles = StyleSheet.create({
+  successWrap: { position: "absolute", bottom: 20, left: 16, right: 16, alignItems: "center" },
+  successBubble: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#e8faf1", borderColor: "#b6ebce", borderWidth: 1, borderRadius: 26, paddingHorizontal: 18, paddingVertical: 14, shadowColor: "#075c38", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
+  successCheck: { color: "#05864e", fontSize: 18, fontWeight: "700" },
+  successText: { color: "#07633d", fontSize: 13, fontWeight: "600", flexShrink: 1 },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   header: { height: 55, paddingHorizontal: 22, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   backButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#10182a", alignItems: "center", justifyContent: "center" },

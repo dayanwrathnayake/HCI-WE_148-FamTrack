@@ -35,7 +35,7 @@ export default function MyAccountScreen() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) { setMessage(""); return; }
     updateAccount({ name: name.trim(), email: email.trim(), phone: phone.trim(), avatar });
-    setMessage("Account details saved.");
+    router.replace({ pathname: "/(tabs)/settings", params: { accountUpdated: String(Date.now()) } });
   };
 
   return (
@@ -66,7 +66,7 @@ export default function MyAccountScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-      <AppBottomNav activeRouteName="settings" />
+      
     </View>
   );
 }
