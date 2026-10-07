@@ -131,7 +131,7 @@ export default function HomeScreen() {
               style={[styles.quickActionButton, styles.spendButton]}
             >
               <Icon name="spend" width={31} height={31} />
-              <Text style={styles.quickActionText}>Spend</Text>
+              <Text style={styles.quickActionText}>Expense</Text>
             </Pressable>
             <Pressable
               onPress={handleIncomePress}
