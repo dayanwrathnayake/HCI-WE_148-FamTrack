@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,15 +9,17 @@ import { INCOME_SOURCES, IncomeSource, localDate, SOURCE_STYLE } from "../consta
 import { useIncome } from "../context/IncomeContext";
 
 export default function AddIncomeScreen() {
-  const { addIncome } = useIncome();
-  const [amount, setAmount] = useState("");
-  const [source, setSource] = useState<IncomeSource>("Salary");
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState(localDate());
-  const [member, setMember] = useState("Me");
-  const [status, setStatus] = useState<"Received" | "Expected">("Received");
-  const [familyBudget, setFamilyBudget] = useState(true);
-  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const { addIncome, updateIncome, entries } = useIncome();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const existing = entries.find(entry => entry.id === id);
+  const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
+  const [source, setSource] = useState<IncomeSource>(existing?.source ?? "Salary");
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [date, setDate] = useState(existing?.date ?? localDate());
+  const [member, setMember] = useState(existing?.member ?? "Me");
+  const [status, setStatus] = useState<"Received" | "Expected">(existing?.status ?? "Received");
+  const [familyBudget, setFamilyBudget] = useState(existing?.familyBudget ?? true);
+  const [repeatMonthly, setRepeatMonthly] = useState(existing?.repeatMonthly ?? false);
   const [error, setError] = useState("");
   const back = () => router.canGoBack() ? router.back() : router.replace("/income");
   const save = () => {
@@ -26,11 +28,13 @@ export default function AddIncomeScreen() {
     if (!Number.isFinite(numeric) || numeric <= 0) { setError("Enter an amount greater than zero."); return; }
     if (!title.trim()) { setError("Enter an income title."); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || localDate(parsed) !== date) { setError("Select a valid date."); return; }
-    addIncome({ amount: numeric, source, title: title.trim(), date, member, status, familyBudget, repeatMonthly });
-    router.replace({ pathname: "/income", params: { month: date.slice(0, 7), saved: String(Date.now()) } });
+    const input = { amount: numeric, source, title: title.trim(), date, member, status, familyBudget, repeatMonthly };
+    if (id && !existing) { setError("This income entry no longer exists."); return; }
+    if (existing) updateIncome(existing.id, input); else addIncome(input);
+    router.replace({ pathname: "/income", params: { month: date.slice(0, 7), saved: String(Date.now()), action: existing ? "updated" : "added" } });
   };
   return <View style={styles.screen}><SafeAreaView style={styles.screen} edges={["top"]}>
-    <IncomeHeader title="Add Income" onBack={back} />
+    <IncomeHeader title={existing ? "Edit Income" : "Add Income"} onBack={back} />
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>AMOUNT</Text>
@@ -44,7 +48,7 @@ export default function AddIncomeScreen() {
           <View style={styles.option}><View style={[styles.optionIcon, { backgroundColor: "#edf2ff" }]}><Text>▣</Text></View><View style={styles.flex}><Text style={styles.optionTitle}>Repeat monthly</Text><Text style={styles.optionSubtitle}>Save as a monthly income</Text></View><Switch accessibilityLabel="Repeat monthly" value={repeatMonthly} onValueChange={setRepeatMonthly} trackColor={{ false: "#d9dfe7", true: "#00c878" }} thumbColor="white" /></View>
         </View>
         {!!error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
-        <View style={styles.buttons}><Pressable accessibilityRole="button" onPress={back} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={save} style={styles.save}><Text style={styles.saveText}>Save Income</Text></Pressable></View>
+        <View style={styles.buttons}><Pressable accessibilityRole="button" onPress={back} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={save} style={styles.save}><Text style={styles.saveText}>{existing ? "Update Income" : "Save Income"}</Text></Pressable></View>
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView><AppBottomNav activeRouteName="home" /></View>;

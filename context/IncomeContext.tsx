@@ -2,7 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { type IncomeEntry, localDate } from "../constants/income";
 import { useNotifications } from "./NotificationContext";
 
-const IncomeContext = createContext<{ entries: IncomeEntry[]; addIncome: (entry: Omit<IncomeEntry, "id">) => void } | undefined>(undefined);
+const IncomeContext = createContext<{ entries: IncomeEntry[]; addIncome: (entry: Omit<IncomeEntry, "id">) => void; updateIncome: (id: string, entry: Omit<IncomeEntry, "id">) => void; deleteIncome: (id: string) => void } | undefined>(undefined);
 export function IncomeProvider({ children }: { children: ReactNode }) {
   const { addNotification } = useNotifications();
   const [entries, setEntries] = useState<IncomeEntry[]>(() => {
@@ -19,7 +19,9 @@ export function IncomeProvider({ children }: { children: ReactNode }) {
     setEntries(previous => [{ ...entry, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` }, ...previous]);
     addNotification({ title: entry.title, detail: entry.status === "Received" ? "Income received" : "Income expected", amount: entry.amount, kind: "income", emoji: "💵" });
   };
-  return <IncomeContext.Provider value={{ entries, addIncome }}>{children}</IncomeContext.Provider>;
+  const updateIncome = (id: string, entry: Omit<IncomeEntry, "id">) => setEntries(previous => previous.map(item => item.id === id ? { ...entry, id } : item));
+  const deleteIncome = (id: string) => setEntries(previous => previous.filter(item => item.id !== id));
+  return <IncomeContext.Provider value={{ entries, addIncome, updateIncome, deleteIncome }}>{children}</IncomeContext.Provider>;
 }
 export function useIncome() {
   const context = useContext(IncomeContext);
