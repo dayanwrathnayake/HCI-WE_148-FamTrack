@@ -1,5 +1,18 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+import { colors } from "../constants/colors";
+import { useFamily } from "../context/FamilyContext";
+import { getInviteErrorMessage } from "../services/familyService";
 
 type MemberType = "Parent" | "Child" | "Other";
 const MEMBER_TYPES: MemberType[] = ["Parent", "Child", "Other"];
@@ -9,14 +22,48 @@ type AddFamilyMemberModalProps = {
   onClose: () => void;
 };
 
-export function AddFamilyMemberModal({ visible, onClose }: AddFamilyMemberModalProps) {
+export function AddFamilyMemberModal({ visible, onClose: closeModal }: AddFamilyMemberModalProps) {
   const [name, setName] = useState("");
   const [memberType, setMemberType] = useState<MemberType>("Parent");
   const [contact, setContact] = useState("");
   const [canAddExpenses, setCanAddExpenses] = useState(true);
 
-  // TODO: wire up once there's a real family-member data source to save to.
-  const handleSaveAndInvite = () => onClose();
+  const { inviteMember, isAdmin } = useFamily();
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Every close path (overlay, X, Cancel, Android back) goes through here.
+  const onClose = () => {
+    if (submitting) return;
+    setError(null);
+    closeModal();
+  };
+
+  // Creates a pending member + invitation in ONE atomic batch (see services/familyService.ts).
+  // The invited person is linked when they REGISTER with this email; people who already have
+  // an account are not linked by an invitation yet.
+  const handleSaveAndInvite = async () => {
+    if (submitting) return;
+    if (!isAdmin) {
+      setError("Only the family admin can invite members.");
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+    try {
+      await inviteMember({ name, relationship: memberType, contact, canAddExpenses });
+      setName("");
+      setContact("");
+      setMemberType("Parent");
+      setCanAddExpenses(true);
+      closeModal();
+    } catch (e) {
+      setError(getInviteErrorMessage(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -83,12 +130,22 @@ export function AddFamilyMemberModal({ visible, onClose }: AddFamilyMemberModalP
             />
           </View>
 
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
           <View style={styles.actionsRow}>
             <Pressable onPress={onClose} style={styles.cancelButton}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={handleSaveAndInvite} style={styles.saveButton}>
-              <Text style={styles.saveButtonText}>Save & invite</Text>
+            <Pressable
+              onPress={handleSaveAndInvite}
+              disabled={submitting}
+              style={[styles.saveButton, submitting && styles.saveButtonBusy]}
+            >
+              {submitting ? (
+                <ActivityIndicator color={colors.black} />
+              ) : (
+                <Text style={styles.saveButtonText}>Save & invite</Text>
+              )}
             </Pressable>
           </View>
         </View>
@@ -98,6 +155,14 @@ export function AddFamilyMemberModal({ visible, onClose }: AddFamilyMemberModalP
 }
 
 const styles = StyleSheet.create({
+  errorText: {
+    marginTop: 12,
+    fontSize: 12,
+    color: colors.error,
+  },
+  saveButtonBusy: {
+    opacity: 0.6,
+  },
   overlay: {
     flex: 1,
     justifyContent: "flex-end",

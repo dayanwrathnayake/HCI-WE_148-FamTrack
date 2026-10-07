@@ -127,7 +127,12 @@ service cloud.firestore {
         && isStr(request.resource.data.name, 1, 100);
 
       match /members/{memberId} {
-        // Family members can read the roster. A person can also read their own
+        // A member of this family can list its roster. Nobody else can: not strangers,
+        // and not members of other families (isMemberOf compares the caller's own
+        // profile familyId with this path's familyId).
+        allow list: if isMemberOf(familyId);
+
+        // Family members can read a single member. A person can also read their own
         // pending invite so registration can tell whether it is still valid.
         allow get: if isMemberOf(familyId)
           || resource == null
