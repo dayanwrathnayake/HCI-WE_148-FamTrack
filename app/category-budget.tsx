@@ -1,86 +1,43 @@
 import { router } from "expo-router";
+import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomNav } from "../components/AppBottomNav";
 import { CircularProgressRing } from "../components/CircularProgressRing";
 import { Icon } from "../components/Icon";
+import { DEFAULT_CATEGORY_SHARES } from "../constants/categories";
+import { useBudget } from "../context/BudgetContext";
+import { getCategoryAllocations } from "../utils/categories";
+import { getMonthYearLabel } from "../utils/members";
 
-const MONTHLY_BUDGET = 100000;
-const MONTHLY_SPENT = 65000;
-const MONTHLY_LEFT = MONTHLY_BUDGET - MONTHLY_SPENT;
-const PERCENT_USED = MONTHLY_SPENT / MONTHLY_BUDGET;
-
-type CategoryData = {
-  emoji: string;
-  iconBackground: string;
-  name: string;
-  percentText: string;
-  progress: number;
-  fillColor: string;
-  detailText: string;
-  detailColor?: string;
-};
-
-const CATEGORIES: CategoryData[] = [
-  {
-    emoji: "🍔",
-    iconBackground: "#e8f8f0",
-    name: "Food",
-    percentText: "20%",
-    progress: 0.62,
-    fillColor: "#00c46a",
-    detailText: "Rs 12,400 of Rs 20,000",
-  },
-  {
-    emoji: "🛍",
-    iconBackground: "#eef2ff",
-    name: "Shopping",
-    percentText: "30%",
-    progress: 0.74,
-    fillColor: "#4b8df8",
-    detailText: "Rs 22,200 of Rs 30,000",
-  },
-  {
-    emoji: "🩺",
-    iconBackground: "#ffe9f0",
-    name: "Health",
-    percentText: "15%",
-    progress: 0.45,
-    fillColor: "#f2789b",
-    detailText: "Rs 6,750 of Rs 15,000",
-  },
-  {
-    emoji: "🚗",
-    iconBackground: "#eaf7ff",
-    name: "Transport",
-    percentText: "15%",
-    progress: 0.88,
-    fillColor: "#ff7a45",
-    detailText: "Rs 13,200 of Rs 15,000 · near limit",
-    detailColor: "#c2410c",
-  },
-  {
-    emoji: "🧾",
-    iconBackground: "#f1eeff",
-    name: "Bills",
-    percentText: "12%",
-    progress: 0.52,
-    fillColor: "#7c5cf2",
-    detailText: "Rs 6,240 of Rs 12,000",
-  },
-  {
-    emoji: "•••",
-    iconBackground: "#edf0f3",
-    name: "Other",
-    percentText: "8%",
-    progress: 0.52,
-    fillColor: "#9aa3ae",
-    detailText: "Rs 4,210 of Rs 8,000",
-  },
-];
+// Nothing is spent until the expense phase provides real totals (overall and per category).
+const MONTHLY_SPENT = 0;
+const CATEGORY_SPENT = 0;
 
 export default function CategoryBudgetScreen() {
+  const { status, budget, monthKey } = useBudget();
+
+  const monthlyBudget = budget?.amount ?? 0;
+  const monthlyLeft = monthlyBudget - MONTHLY_SPENT;
+  const percentUsed = monthlyBudget > 0 ? MONTHLY_SPENT / monthlyBudget : 0;
+
+  // Rupee allocations are derived from the saved percentages; "Other" is the remainder, so the rows
+  // always total exactly the monthly budget.
+  const allocations = useMemo(
+    () => getCategoryAllocations(monthlyBudget, budget?.categories ?? DEFAULT_CATEGORY_SHARES),
+    [monthlyBudget, budget?.categories],
+  );
+
+  const [year, month] = monthKey.split("-").map(Number);
+  const monthLabel = getMonthYearLabel(new Date(year, month - 1, 1));
+  const noteText =
+    status === "none"
+      ? `No budget set for ${monthLabel} yet.`
+      : status === "error"
+        ? "Couldn't load this month's budget. Please try again later."
+        : null;
+
   const handleBack = () => router.back();
   const handleEditBudget = () => router.push("/edit-family-budget");
 
@@ -97,18 +54,18 @@ export default function CategoryBudgetScreen() {
 
           <View style={styles.summaryCard}>
             <CircularProgressRing
-              progress={PERCENT_USED}
+              progress={percentUsed}
               size={104}
               strokeWidth={13}
               trackColor="#edf0f3"
               progressColor="#00c46a"
-              centerLabel={`${Math.round(PERCENT_USED * 100)}%`}
+              centerLabel={`${Math.round(percentUsed * 100)}%`}
               centerSubLabel="used"
             />
             <View style={styles.summaryDetails}>
               <Text style={styles.summaryLabel}>Monthly Budget</Text>
               <Text style={styles.summaryAmount}>
-                Rs {MONTHLY_BUDGET.toLocaleString("en-US")}
+                Rs {monthlyBudget.toLocaleString("en-US")}
               </Text>
               <View style={styles.summaryStatsRow}>
                 <View style={[styles.summaryStat, { backgroundColor: "#f4f6f8" }]}>
@@ -120,12 +77,14 @@ export default function CategoryBudgetScreen() {
                 <View style={[styles.summaryStat, { backgroundColor: "#e8f8f0" }]}>
                   <Text style={[styles.summaryStatLabel, { color: "#4c8e6e" }]}>Left</Text>
                   <Text style={[styles.summaryStatValue, { color: "#00854b" }]}>
-                    Rs {MONTHLY_LEFT.toLocaleString("en-US")}
+                    Rs {monthlyLeft.toLocaleString("en-US")}
                   </Text>
                 </View>
               </View>
             </View>
           </View>
+
+          {noteText ? <Text style={styles.noteText}>{noteText}</Text> : null}
 
           <View style={styles.categoryHeaderRow}>
             <Text style={styles.categoryHeaderTitle}>Category</Text>
@@ -133,26 +92,29 @@ export default function CategoryBudgetScreen() {
           </View>
 
           <View style={styles.categoryList}>
-            {CATEGORIES.map((category) => (
-              <View key={category.name} style={styles.categoryCard}>
+            {allocations.map((category) => (
+              <View key={category.id} style={styles.categoryCard}>
                 <View style={[styles.categoryIconWrap, { backgroundColor: category.iconBackground }]}>
                   <Text style={styles.categoryEmoji}>{category.emoji}</Text>
                 </View>
                 <View style={styles.categoryBody}>
                   <View style={styles.categoryTopRow}>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    <Text style={styles.categoryPercent}>{category.percentText}</Text>
+                    <Text style={styles.categoryName}>{category.label}</Text>
+                    <Text style={styles.categoryPercent}>{category.percentage}%</Text>
                   </View>
                   <View style={styles.categoryTrack}>
                     <View
                       style={[
                         styles.categoryFill,
-                        { width: `${category.progress * 100}%`, backgroundColor: category.fillColor },
+                        {
+                          width: `${(category.amount > 0 ? Math.min(1, CATEGORY_SPENT / category.amount) : 0) * 100}%`,
+                          backgroundColor: category.fillColor,
+                        },
                       ]}
                     />
                   </View>
-                  <Text style={[styles.categoryDetail, category.detailColor && { color: category.detailColor }]}>
-                    {category.detailText}
+                  <Text style={styles.categoryDetail}>
+                    Rs {CATEGORY_SPENT.toLocaleString("en-US")} of Rs {category.amount.toLocaleString("en-US")}
                   </Text>
                 </View>
               </View>
@@ -250,6 +212,13 @@ const styles = StyleSheet.create({
   summaryStatValue: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  noteText: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+    color: "#8a93a0",
   },
   categoryHeaderRow: {
     marginTop: 24,

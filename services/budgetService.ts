@@ -1,7 +1,7 @@
 import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
-import type { Budget, WithId } from "../types/models";
+import type { Budget, CategoryShares, WithId } from "../types/models";
 import {
   clampAlertPercentage,
   getBudgetId,
@@ -9,6 +9,7 @@ import {
   getPreviousMonthKey,
   parseBudgetAmount,
 } from "../utils/budget";
+import { normalizeShares, validateCategoryShares } from "../utils/categories";
 import { validateBudgetAmount, validateBudgetName } from "../utils/validation";
 
 // ONE backend for family budgets. Every screen that shows or edits the family's budget
@@ -33,7 +34,8 @@ export function subscribeToBudget(budgetId: string, onEvent: (e: BudgetEvent) =>
     (snap) => {
       if (snap.exists()) {
         const data = snap.data({ serverTimestamps: "estimate" }) as Budget;
-        onEvent({ status: "ready", budget: { id: snap.id, ...data } });
+        // A budget saved before categories existed has no map: it is read as the default split.
+        onEvent({ status: "ready", budget: { id: snap.id, ...data, categories: normalizeShares(data.categories) } });
       } else if (!snap.metadata.fromCache) {
         // Only the server can confirm that this month has no budget yet.
         onEvent({ status: "none" });
@@ -44,7 +46,10 @@ export function subscribeToBudget(budgetId: string, onEvent: (e: BudgetEvent) =>
 }
 
 /** The only fields copied from an earlier month. Everything else is created fresh on save. */
-export type BudgetPrefill = Pick<Budget, "name" | "amount" | "alertPercentage" | "membersCanAddExpenses">;
+export type BudgetPrefill = Pick<
+  Budget,
+  "name" | "amount" | "alertPercentage" | "membersCanAddExpenses" | "categories"
+>;
 
 /**
  * One-off read of the PREVIOUS month's budget, used only to pre-fill the form when the current month
@@ -63,6 +68,7 @@ export async function getPreviousMonthPrefill(
       amount: data.amount,
       alertPercentage: data.alertPercentage,
       membersCanAddExpenses: data.membersCanAddExpenses,
+      categories: normalizeShares(data.categories),
     };
   } catch {
     return null; // prefill is only a convenience
@@ -79,6 +85,7 @@ export type BudgetErrorCode =
   | "invalid-name"
   | "invalid-amount"
   | "invalid-alert"
+  | "invalid-categories"
   | "rejected"
   | "unknown";
 
@@ -108,6 +115,8 @@ export type SaveBudgetInput = {
   amountText: string;
   alertPercentage: number;
   membersCanAddExpenses: boolean;
+  /** Explicit category shares only. "Other" is never stored; it is whatever is left of 100%. */
+  categories: CategoryShares;
 };
 
 /**
@@ -136,12 +145,17 @@ export async function saveBudget(input: SaveBudgetInput): Promise<void> {
   }
   const alertPercentage = clampAlertPercentage(input.alertPercentage);
 
+  const categoriesError = validateCategoryShares(input.categories);
+  if (categoriesError) throw new BudgetError("invalid-categories", categoriesError);
+
   const ref = doc(db, "budgets", getBudgetId(input.familyId, input.monthKey));
   const editable = {
     name: input.name.trim(),
     amount,
     alertPercentage,
     membersCanAddExpenses: input.membersCanAddExpenses,
+    // The whole map is replaced, so a removed category disappears (its share becomes Other).
+    categories: { ...input.categories },
   };
 
   try {

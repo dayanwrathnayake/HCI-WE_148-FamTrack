@@ -14,7 +14,8 @@ rules_version = '2';
 //   families/{familyId}                      - ownerId is the family's only admin for now
 //   families/{familyId}/members/{memberId}   - may exist before the person has an account
 //   familyInvitations/{lowercasedEmail}      - one pending invitation per email address
-//   budgets/{familyId}_{YYYY-MM}             - one budget per family per month (id is enforced)
+//   budgets/{familyId}_{YYYY-MM}             - one budget per family per month (id is enforced);
+//                                              its `categories` map holds each category's % share
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -101,14 +102,40 @@ service cloud.firestore {
       return string(ts.year()) + '-' + (ts.month() < 10 ? '0' : '') + string(ts.month());
     }
 
+    // One category's share, when present: a whole number from 1 to 100.
+    function validShare(categories, key) {
+      return !(key in categories)
+        || (categories[key] is int && categories[key] >= 1 && categories[key] <= 100);
+    }
+
+    // The per-category split of a budget: only canonical ids, each a whole 1-100, adding up to at
+    // most 100. "other" is NEVER stored; it is derived as 100 - the sum of these.
+    function validCategories(categories) {
+      return categories is map
+        && categories.keys().hasOnly([
+          'food', 'groceries', 'shopping', 'transport', 'bills', 'health', 'entertainment'
+        ])
+        && validShare(categories, 'food')
+        && validShare(categories, 'groceries')
+        && validShare(categories, 'shopping')
+        && validShare(categories, 'transport')
+        && validShare(categories, 'bills')
+        && validShare(categories, 'health')
+        && validShare(categories, 'entertainment')
+        && categories.get('food', 0) + categories.get('groceries', 0)
+           + categories.get('shopping', 0) + categories.get('transport', 0)
+           + categories.get('bills', 0) + categories.get('health', 0)
+           + categories.get('entertainment', 0) <= 100;
+    }
+
     function validBudgetShape(data) {
       return data.keys().hasOnly([
           'familyId', 'name', 'amount', 'period', 'startDate',
-          'alertPercentage', 'membersCanAddExpenses', 'createdBy'
+          'alertPercentage', 'membersCanAddExpenses', 'categories', 'createdBy'
         ])
         && data.keys().hasAll([
           'familyId', 'name', 'amount', 'period', 'startDate',
-          'alertPercentage', 'membersCanAddExpenses', 'createdBy'
+          'alertPercentage', 'membersCanAddExpenses', 'categories', 'createdBy'
         ])
         && data.familyId is string
         && isStr(data.name, 1, 100)
@@ -117,6 +144,7 @@ service cloud.firestore {
         && data.startDate is timestamp
         && data.alertPercentage is int && data.alertPercentage >= 1 && data.alertPercentage <= 100
         && data.membersCanAddExpenses is bool
+        && validCategories(data.categories)
         && data.createdBy is string;
     }
 
@@ -265,11 +293,12 @@ service cloud.firestore {
         && request.resource.data.startDate.seconds() == 0
         && request.resource.data.startDate.nanos() == 0;
 
-      // Family owner (admin) only. familyId, createdBy, period and startDate are frozen.
+      // Family owner (admin) only. familyId, createdBy, period and startDate are frozen. A budget
+      // saved before categories existed gains its `categories` map on its next save.
       allow update: if signedIn()
         && isOwnerOf(resource.data.familyId)
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses'])
+             .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses', 'categories'])
         && validBudgetShape(request.resource.data);
     }
   }

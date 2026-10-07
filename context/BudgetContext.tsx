@@ -16,7 +16,7 @@ import {
   BudgetError,
   type BudgetPrefill,
 } from "../services/budgetService";
-import type { Budget, WithId } from "../types/models";
+import type { Budget, CategoryShares, WithId } from "../types/models";
 import { getBudgetId, getMonthKey, msUntilNextMonth } from "../utils/budget";
 import { useAuth } from "./AuthContext";
 import { useFamily } from "./FamilyContext";
@@ -41,6 +41,7 @@ export type SaveBudgetValues = {
   amountText: string;
   alertPercentage: number;
   membersCanAddExpenses: boolean;
+  categories: CategoryShares;
 };
 
 type BudgetContextValue = {

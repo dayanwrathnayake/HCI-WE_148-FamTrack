@@ -4,7 +4,9 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomNav } from "../components/AppBottomNav";
+import { CategoryShareModal, type CategoryShareMode } from "../components/CategoryShareModal";
 import { Icon } from "../components/Icon";
+import { DEFAULT_CATEGORY_SHARES, getCategoryDefinition } from "../constants/categories";
 import { useBudget } from "../context/BudgetContext";
 import { useFamily } from "../context/FamilyContext";
 import { getBudgetErrorMessage } from "../services/budgetService";
@@ -16,23 +18,15 @@ import {
   getPreviousMonthKey,
   parseBudgetAmount,
 } from "../utils/budget";
+import {
+  getOtherPercentage,
+  getShareIds,
+  validateCategoryShares,
+  withoutShare,
+  withShare,
+} from "../utils/categories";
 import { getMonthYearLabel } from "../utils/members";
-
-type CategoryPillData = {
-  label: string;
-};
-
-// Category allocations are mock until the category budget phase; they are not saved with the budget.
-const SELECTED_CATEGORIES: CategoryPillData[] = [
-  { label: "🍔 Food · 20%" },
-  { label: "🛍 Shopping · 30%" },
-  { label: "🩺 Health · 15%" },
-  { label: "🚗 Transport · 15%" },
-  { label: "🧾 Bills · 12%" },
-];
-
-// "Other" counts toward the total but isn't shown as its own pill, matching the Figma design.
-const SELECTED_CATEGORIES_COUNT = 6;
+import type { CategoryId, CategoryShares } from "../types/models";
 
 const monthDate = (monthKey: string) => {
   const [year, month] = monthKey.split("-").map(Number);
@@ -66,14 +60,20 @@ function EditFamilyBudgetForm() {
   const [membersCanAddExpenses, setMembersCanAddExpenses] = useState(
     () => budget?.membersCanAddExpenses ?? true,
   );
+  // Local draft only: nothing is saved until "Save Changes". "Other" is never stored; it is
+  // whatever the explicit categories leave of the 100%.
+  const [categoryShares, setCategoryShares] = useState<CategoryShares>(
+    () => budget?.categories ?? { ...DEFAULT_CATEGORY_SHARES },
+  );
+  const [categoryModal, setCategoryModal] = useState<CategoryShareMode | null>(null);
   const [prefillLabel, setPrefillLabel] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
   const canEdit = isAdmin && loaded && !saving;
 
-  // When this month has no budget yet, pre-fill the form from last month's (name, amount, alert and
-  // the members toggle only), unless the admin has already started typing. Nothing is written.
+  // When this month has no budget yet, pre-fill the form from last month's (name, amount, alert,
+  // the members toggle and the category shares only), unless the admin has already started typing. Nothing is written.
   const touched = useRef(false);
   useEffect(() => {
     if (budgetStatus !== "none" || !isAdmin) return;
@@ -83,6 +83,7 @@ function EditFamilyBudgetForm() {
       setMonthlyBudget(formatAmountInput(String(prefill.amount)));
       setAlertPercent(prefill.alertPercentage);
       setMembersCanAddExpenses(prefill.membersCanAddExpenses);
+      setCategoryShares(prefill.categories);
       setPrefillLabel(getMonthYearLabel(monthDate(getPreviousMonthKey(monthKey))));
     });
   }, [budgetStatus, isAdmin, loadPrefill, monthKey]);
@@ -101,6 +102,11 @@ function EditFamilyBudgetForm() {
   const handleCancel = () => router.back();
   const handleSaveChanges = async () => {
     if (!canEdit) return;
+    const categoriesError = validateCategoryShares(categoryShares);
+    if (categoriesError) {
+      setErrorText(categoriesError);
+      return;
+    }
     setErrorText(null);
     setSaving(true);
     try {
@@ -109,6 +115,7 @@ function EditFamilyBudgetForm() {
         amountText: monthlyBudget,
         alertPercentage: alertPercent,
         membersCanAddExpenses,
+        categories: categoryShares,
       });
       router.back();
     } catch (error) {
@@ -120,8 +127,29 @@ function EditFamilyBudgetForm() {
   // The period is Monthly only and the start date is the 1st of the current month for now.
   const handleBudgetPeriodPress = () => {};
   const handleStartDatePress = () => {};
-  // TODO: build real category add/remove (category budget phase).
-  const handleAddCategory = () => {};
+  const handleAddCategory = () => {
+    if (canEdit) setCategoryModal({ kind: "add" });
+  };
+  const handleCategoryPress = (id: CategoryId) => {
+    if (canEdit) setCategoryModal({ kind: "edit", id });
+  };
+  const handleApplyShare = (id: CategoryId, percentage: number) => {
+    touched.current = true;
+    setErrorText(null);
+    setCategoryShares((prev) => withShare(prev, id, percentage));
+    setCategoryModal(null);
+  };
+  const handleRemoveShare = (id: CategoryId) => {
+    touched.current = true;
+    setErrorText(null);
+    setCategoryShares((prev) => withoutShare(prev, id));
+    setCategoryModal(null);
+  };
+
+  const shareIds = getShareIds(categoryShares);
+  const otherPercentage = getOtherPercentage(categoryShares);
+  // "Other" counts toward the total but isn't shown as its own pill, matching the Figma design.
+  const selectedCount = shareIds.length + (otherPercentage > 0 ? 1 : 0);
 
   const alertAmount = getAlertAmount(parseBudgetAmount(monthlyBudget) ?? 0, alertPercent);
 
@@ -209,18 +237,29 @@ function EditFamilyBudgetForm() {
 
           <View style={styles.categoriesHeaderRow}>
             <Text style={styles.fieldLabel}>BUDGET CATEGORIES</Text>
-            <Text style={styles.selectedCountText}>{SELECTED_CATEGORIES_COUNT} selected</Text>
+            <Text style={styles.selectedCountText}>{selectedCount} selected</Text>
           </View>
           <View style={styles.categoryPillsWrap}>
-            {SELECTED_CATEGORIES.map((category) => (
-              <View key={category.label} style={styles.categoryPill}>
-                <Text style={styles.categoryPillText}>{category.label}</Text>
-              </View>
-            ))}
+            {shareIds.map((id) => {
+              const category = getCategoryDefinition(id);
+              return (
+                <Pressable
+                  key={id}
+                  onPress={() => handleCategoryPress(id)}
+                  disabled={!canEdit}
+                  style={styles.categoryPill}
+                >
+                  <Text style={styles.categoryPillText}>
+                    {category.emoji} {category.label} · {categoryShares[id]}%
+                  </Text>
+                </Pressable>
+              );
+            })}
             <Pressable onPress={handleAddCategory} style={styles.addCategoryPill}>
               <Text style={styles.addCategoryText}>+ Add category</Text>
             </Pressable>
           </View>
+          <Text style={styles.otherCaption}>Other · {otherPercentage}% (the rest of the budget)</Text>
 
           <Text style={styles.fieldLabel}>ALERT WHEN SPENDING REACHES</Text>
           <View style={styles.alertCard}>
@@ -285,11 +324,28 @@ function EditFamilyBudgetForm() {
       </SafeAreaView>
 
       <AppBottomNav activeRouteName="budget" />
+
+      {categoryModal ? (
+        <CategoryShareModal
+          key={categoryModal.kind === "edit" ? categoryModal.id : "add"}
+          mode={categoryModal}
+          shares={categoryShares}
+          onClose={() => setCategoryModal(null)}
+          onApply={handleApplyShare}
+          onRemove={handleRemoveShare}
+        />
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  otherCaption: {
+    marginTop: 8,
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#8a93a0",
+  },
   noteText: {
     marginTop: 12,
     fontSize: 12,
