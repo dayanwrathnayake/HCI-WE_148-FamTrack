@@ -89,6 +89,14 @@ service cloud.firestore {
         && data.canAddExpenses is bool;
     }
 
+    // Family Owner or Admin member check
+    function isFamilyAdmin(familyId) {
+      return isOwnerOf(familyId)
+        || (signedIn() 
+            && exists(memberPath(familyId, request.auth.uid))
+            && get(memberPath(familyId, request.auth.uid)).data.role == 'admin');
+    }
+
     // ---------- users ----------
     match /users/{uid} {
       // Own profile only. No list, update or delete for now.
@@ -211,6 +219,36 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'accepted'
         && getAfter(userPath(request.auth.uid)).data.familyId == resource.data.familyId;
+    }
+
+    // ---------- expenses ----------
+    match /expenses/{expenseId} {
+      allow read: if signedIn() && isMemberOf(resource.data.familyId);
+      
+      allow create: if signedIn() 
+        && isMemberOf(request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+
+      allow update, delete: if signedIn() 
+        && isMemberOf(resource.data.familyId)
+        && (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId));
+    }
+
+    // ---------- saving goals ----------
+    match /savingGoals/{goalId} {
+      allow read: if signedIn() && isMemberOf(resource.data.familyId);
+
+      allow create: if signedIn() 
+        && isMemberOf(request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.targetAmount is number
+        && request.resource.data.targetAmount > 0;
+
+      allow update, delete: if signedIn() 
+        && isMemberOf(resource.data.familyId)
+        && (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId));
     }
   }
 }
