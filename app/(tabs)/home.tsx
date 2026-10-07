@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressBar";
 import type { IconName } from "../../constants/icons";
+import { useNotifications } from "../../context/NotificationContext";
 
 const TOTAL_BALANCE = "Rs 60,000.00";
 const BUDGET_LEFT = "Rs 35,500.00";
@@ -67,14 +68,15 @@ function CategoryPill({ pill }: { pill: CategoryPillData }) {
 
 export default function HomeScreen() {
   const [balanceHidden, setBalanceHidden] = useState(false);
+  const { unreadCount } = useNotifications();
 
   const handleFamilyBudgetPress = () => router.push("/(tabs)/budget");
   // TODO: Bills & Reminders belongs to another team member's module.
   const handleBillsPress = () => router.push("/recurring-bills");
   const handleAllBudgetsPress = () => router.push("/(tabs)/budget");
   const handleSpendPress = () => router.push("/expense-history");
-  const handleIncomePress = () => {};
-  const handleNotificationPress = () => {};
+  const handleIncomePress = () => router.push("/income");
+  const handleNotificationPress = () => router.push("/notifications");
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -88,8 +90,9 @@ export default function HomeScreen() {
               Ready to track your money..!
             </Text>
           </View>
-          <Pressable onPress={handleNotificationPress} hitSlop={8}>
+          <Pressable onPress={handleNotificationPress} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`} style={styles.notificationButton}>
             <Icon name="notification" size={34} />
+            {unreadCount > 0 && <View style={styles.notificationDot} />}
           </Pressable>
         </View>
 
@@ -225,6 +228,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  notificationButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  notificationDot: { position: "absolute", right: 5, top: 4, width: 11, height: 11, borderRadius: 6, backgroundColor: "#ef4444", borderWidth: 2, borderColor: "white" },
   screen: {
     flex: 1,
     backgroundColor: "#ffffff",

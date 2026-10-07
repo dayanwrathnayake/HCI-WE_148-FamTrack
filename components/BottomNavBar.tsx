@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "./Icon";
@@ -84,7 +85,7 @@ export function BottomNavBar({ activeRouteName, onNavigate, onAddPress }: Bottom
         visible={addMenuVisible}
         onClose={() => setAddMenuVisible(false)}
         onExpense={() => onAddPress?.()}
-        onIncome={() => Alert.alert("Add Income", "The income entry page is not available yet.")}
+        onIncome={() => router.push("/add-income")}
       />
     </SafeAreaView>
   );

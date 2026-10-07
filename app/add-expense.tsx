@@ -28,7 +28,7 @@ export default function AddExpenseScreen() {
   const [splitMembers, setSplitMembers] = useState<Member[]>([]);
 
   const isValid =
-    amount.trim().length > 0 && Number(amount) > 0 && selectedCategory !== null;
+    amount.trim().length > 0 && Number(amount.replace(/,/g, "")) > 0 && selectedCategory !== null;
 
   const handleAmountChange = (text: string) => {
     const rawNumber = text.replace(/[^0-9]/g, "");

@@ -72,7 +72,7 @@ export default function ProfileScreen() {
           <View style={styles.menuCard}>
             <ProfileRow title="My Account" subtitle="Name, email, password" icon="account" background="#e8f8f2" onPress={() => router.push("/my-account")} />
             <ProfileRow title="Manage Group" subtitle="Members, roles, invites" icon="group" background="#f0efff" badge={String(INITIAL_GROUP_MEMBERS.length + 1)} onPress={() => router.push("/manage-group")} />
-            <ProfileRow title="Reports" subtitle="Monthly summary, export" icon="report" background="#fff1e7" last onPress={() => showPendingFeature("Reports")} />
+            <ProfileRow title="Reports" subtitle="Monthly spending summary" icon="report" background="#fff1e7" last onPress={() => router.push("/reports")} />
           </View>
         </View>
         <View style={styles.section} onLayout={event => setPreferencesY(event.nativeEvent.layout.y)}>

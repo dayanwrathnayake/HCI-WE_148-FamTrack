@@ -5,6 +5,7 @@ export type HistoryItem = {
   title: string;
   category: "Food" | "Utilities" | "Transport" | "Housing" | "Bills" | "Rent";
   time: string;
+  date?: string;
   payerText: string;
   amount: number;
   status: ExpenseStatus;

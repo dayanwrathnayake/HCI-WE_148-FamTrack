@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState } from "react";
+import { expenseDate } from "../utils/expenseDates";
+import { useNotifications } from "./NotificationContext";
 import {
   HistoryItem,
   MOCK_HISTORY_GROUPS,
@@ -27,7 +29,8 @@ type ExpenseContextType = {
 const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
 export function ExpenseProvider({ children }: { children: React.ReactNode }) {
-  const [historyGroups, setHistoryGroups] = useState(MOCK_HISTORY_GROUPS);
+  const { addNotification } = useNotifications();
+  const [historyGroups, setHistoryGroups] = useState(() => MOCK_HISTORY_GROUPS.map(group => ({ ...group, items: group.items.map(item => ({ ...item, date: expenseDate(group.dateLabel) })) })));
 
   const totalSpent = historyGroups.reduce((total, group) => {
     return total + group.items.reduce((sum, item) => sum + item.amount, 0);
@@ -39,7 +42,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       bg: input.iconBg || "#10b981",
     };
 
-    const newItem: HistoryItem = {
+    const newItem: HistoryItem & { date: string } = {
+      date: expenseDate(input.date),
       id: Date.now().toString(),
       title: input.title,
       category: input.category,
@@ -54,6 +58,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       iconEmoji: iconConfig.emoji,
     };
 
+    addNotification({ title: input.title, detail: "Expense recorded", amount: input.amount, kind: "expense", emoji: iconConfig.emoji });
     setHistoryGroups((prevGroups) => {
       const todayGroupIndex = prevGroups.findIndex(
         (g) => g.dateLabel === "Today",
