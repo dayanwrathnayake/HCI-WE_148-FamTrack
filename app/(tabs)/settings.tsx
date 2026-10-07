@@ -6,6 +6,7 @@ import { SvgXml } from "react-native-svg";
 import { Icon } from "../../components/Icon";
 import { INITIAL_GROUP_MEMBERS } from "../../constants/group";
 import { useAccount } from "../../context/AccountContext";
+import { useAuth } from "../../context/AuthContext";
 
 const glyphs = {
   account: '<circle cx="12" cy="8" r="4" fill="#699cab"/><path d="M4 21v-3a8 8 0 0 1 16 0v3" fill="#699cab"/>',
@@ -33,6 +34,8 @@ function ProfileRow({ title, subtitle, icon, background, onPress, badge, last }:
 }
 export default function ProfileScreen() {
   const { account, deleteAccount } = useAccount();
+  // Real sign-out (Firebase Auth); the route guard in app/_layout.tsx then returns to Login.
+  const { signOut } = useAuth();
   const [deleteVisible, setDeleteVisible] = useState(false);
   const { accountUpdated } = useLocalSearchParams<{ accountUpdated?: string }>();
   const showSuccess = !!accountUpdated;
@@ -85,7 +88,7 @@ export default function ProfileScreen() {
             <ProfileRow title="Delete Account" subtitle="Remove your account" icon="trash" background="#fff0f0" last onPress={() => setDeleteVisible(true)} />
           </View>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => router.replace("/login")} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>Log out</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { signOut().catch(() => {}); }} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>Log out</Text></Pressable>
       </ScrollView>
       <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => setDeleteVisible(false)}>
         <View style={styles.deleteOverlay}><View style={styles.deleteDialog} accessibilityViewIsModal>

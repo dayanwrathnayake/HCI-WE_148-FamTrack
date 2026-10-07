@@ -6,13 +6,16 @@ import { AppBottomNav } from "../components/AppBottomNav";
 import { IncomeHeader } from "../components/IncomeHeader";
 import { ProgressBar } from "../components/ProgressBar";
 import { SpendingDonut } from "../components/SpendingDonut";
+import { getExpenseCategory } from "../constants/categories";
 import { useExpenses } from "../context/ExpenseContext";
 import { expenseDate } from "../utils/expenseDates";
 
 const CATEGORY_COLORS: Record<string, string> = { Food: "#38b6f5", Groceries: "#05bf78", Entertainment: "#ff9466", Health: "#6a66ff", Travel: "#66dfa3", Transport: "#994cff", Utilities: "#f5b94e", Bills: "#f2789b", Rent: "#4b8df8", Housing: "#4b8df8", Other: "#9aa3af" };
 const currency = (value: number) => `Rs ${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 export default function ReportsScreen() {
-  const { historyGroups } = useExpenses();
+  // The real expense backend (ExpenseContext), which holds the CURRENT month only: other months
+  // show as empty until older months are loaded.
+  const { expenses } = useExpenses();
   const [month, setMonth] = useState(() => expenseDate().slice(0, 7));
   const [scope, setScope] = useState<"All" | "Shared" | "Personal">("All");
   const period = new Date(`${month}-01T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -21,7 +24,7 @@ export default function ReportsScreen() {
     date.setMonth(date.getMonth() + amount);
     setMonth(expenseDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`).slice(0, 7));
   };
-  const monthly = historyGroups.flatMap(group => group.items.map(item => ({ ...item, date: item.date || expenseDate(group.dateLabel) }))).filter(item => item.date.startsWith(month));
+  const monthly = expenses.map(expense => ({ amount: expense.amount, category: getExpenseCategory(expense.categoryId).label, status: expense.status as string, date: expense.monthKey })).filter(item => item.date.startsWith(month));
   const paid = monthly.filter(item => item.status !== "Pending" && (scope === "All" || item.status === scope));
   const pending = monthly.filter(item => item.status === "Pending").reduce((sum, item) => sum + item.amount, 0);
   const total = paid.reduce((sum, item) => sum + item.amount, 0);
