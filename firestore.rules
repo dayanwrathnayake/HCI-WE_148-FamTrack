@@ -14,6 +14,7 @@ rules_version = '2';
 //   families/{familyId}                      - ownerId is the family's only admin for now
 //   families/{familyId}/members/{memberId}   - may exist before the person has an account
 //   familyInvitations/{lowercasedEmail}      - one pending invitation per email address
+//   budgets/{familyId}_{YYYY-MM}             - one budget per family per month (id is enforced)
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -87,6 +88,36 @@ service cloud.firestore {
         && data.role in ['admin', 'member']
         && data.status in ['pending', 'active']
         && data.canAddExpenses is bool;
+    }
+
+    // A budget id is "<familyId>_<YYYY-MM>". Family ids are Firestore auto-ids, which never
+    // contain an underscore, so the part before it is always the family.
+    function budgetFamilyId(budgetId) {
+      return budgetId.split('_')[0];
+    }
+
+    // "2026-10" for a timestamp, in UTC. Budgets store the 1st of their month at 00:00:00 UTC.
+    function monthKeyOf(ts) {
+      return string(ts.year()) + '-' + (ts.month() < 10 ? '0' : '') + string(ts.month());
+    }
+
+    function validBudgetShape(data) {
+      return data.keys().hasOnly([
+          'familyId', 'name', 'amount', 'period', 'startDate',
+          'alertPercentage', 'membersCanAddExpenses', 'createdBy'
+        ])
+        && data.keys().hasAll([
+          'familyId', 'name', 'amount', 'period', 'startDate',
+          'alertPercentage', 'membersCanAddExpenses', 'createdBy'
+        ])
+        && data.familyId is string
+        && isStr(data.name, 1, 100)
+        && data.amount is int && data.amount >= 1 && data.amount <= 100000000
+        && data.period == 'monthly'
+        && data.startDate is timestamp
+        && data.alertPercentage is int && data.alertPercentage >= 1 && data.alertPercentage <= 100
+        && data.membersCanAddExpenses is bool
+        && data.createdBy is string;
     }
 
     // ---------- users ----------
@@ -211,6 +242,35 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'accepted'
         && getAfter(userPath(request.auth.uid)).data.familyId == resource.data.familyId;
+    }
+
+    // ---------- budgets ----------
+    // One document per family per month, so earlier months are never overwritten and a family
+    // cannot have two budgets for the same month. No delete and no list (the client reads the
+    // current month's document by its id).
+    match /budgets/{budgetId} {
+      // Any member of the family, including for a month that has no budget yet.
+      allow get: if isMemberOf(budgetFamilyId(budgetId));
+
+      // Family owner (admin) only. The id must be <familyId>_<YYYY-MM of startDate>, and startDate
+      // must be the 1st of that month at 00:00:00 UTC.
+      allow create: if signedIn()
+        && validBudgetShape(request.resource.data)
+        && isOwnerOf(request.resource.data.familyId)
+        && budgetId == request.resource.data.familyId + '_' + monthKeyOf(request.resource.data.startDate)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.startDate.day() == 1
+        && request.resource.data.startDate.hours() == 0
+        && request.resource.data.startDate.minutes() == 0
+        && request.resource.data.startDate.seconds() == 0
+        && request.resource.data.startDate.nanos() == 0;
+
+      // Family owner (admin) only. familyId, createdBy, period and startDate are frozen.
+      allow update: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses'])
+        && validBudgetShape(request.resource.data);
     }
   }
 }

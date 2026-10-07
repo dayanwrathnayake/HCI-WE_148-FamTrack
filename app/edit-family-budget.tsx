@@ -1,15 +1,28 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomNav } from "../components/AppBottomNav";
 import { Icon } from "../components/Icon";
+import { useBudget } from "../context/BudgetContext";
+import { useFamily } from "../context/FamilyContext";
+import { getBudgetErrorMessage } from "../services/budgetService";
+import {
+  clampAlertPercentage,
+  DEFAULT_ALERT_PERCENTAGE,
+  formatAmountInput,
+  getAlertAmount,
+  getPreviousMonthKey,
+  parseBudgetAmount,
+} from "../utils/budget";
+import { getMonthYearLabel } from "../utils/members";
 
 type CategoryPillData = {
   label: string;
 };
 
+// Category allocations are mock until the category budget phase; they are not saved with the budget.
 const SELECTED_CATEGORIES: CategoryPillData[] = [
   { label: "🍔 Food · 20%" },
   { label: "🛍 Shopping · 30%" },
@@ -18,29 +31,118 @@ const SELECTED_CATEGORIES: CategoryPillData[] = [
   { label: "🧾 Bills · 12%" },
 ];
 
-const ALERT_THRESHOLD_PERCENT = 80;
 // "Other" counts toward the total but isn't shown as its own pill, matching the Figma design.
 const SELECTED_CATEGORIES_COUNT = 6;
 
+const monthDate = (monthKey: string) => {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1);
+};
+
 export default function EditFamilyBudgetScreen() {
-  const [budgetName, setBudgetName] = useState("Perera Family Budget");
-  const [monthlyBudget, setMonthlyBudget] = useState("100,000");
-  const [membersCanAddExpenses, setMembersCanAddExpenses] = useState(true);
+  const { status: budgetStatus, budgetId } = useBudget();
+  const loaded = budgetStatus === "ready" || budgetStatus === "none";
+
+  // The form takes its initial values from the saved budget (or defaults) when it mounts, so it is
+  // re-mounted once the budget has loaded. Later snapshots never overwrite what the admin is typing.
+  return <EditFamilyBudgetForm key={`${budgetId ?? "none"}:${loaded}`} />;
+}
+
+function EditFamilyBudgetForm() {
+  const { status: familyStatus, family, activeMembers, isAdmin } = useFamily();
+  const { status: budgetStatus, budget, monthKey, saveBudget, loadPrefill } = useBudget();
+
+  const loaded = budgetStatus === "ready" || budgetStatus === "none";
+
+  const [budgetName, setBudgetName] = useState(
+    () => budget?.name ?? (family ? `${family.name} Budget` : ""),
+  );
+  const [monthlyBudget, setMonthlyBudget] = useState(() =>
+    budget ? formatAmountInput(String(budget.amount)) : "",
+  );
+  const [alertPercent, setAlertPercent] = useState(
+    () => budget?.alertPercentage ?? DEFAULT_ALERT_PERCENTAGE,
+  );
+  const [membersCanAddExpenses, setMembersCanAddExpenses] = useState(
+    () => budget?.membersCanAddExpenses ?? true,
+  );
+  const [prefillLabel, setPrefillLabel] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
+  const canEdit = isAdmin && loaded && !saving;
+
+  // When this month has no budget yet, pre-fill the form from last month's (name, amount, alert and
+  // the members toggle only), unless the admin has already started typing. Nothing is written.
+  const touched = useRef(false);
+  useEffect(() => {
+    if (budgetStatus !== "none" || !isAdmin) return;
+    void loadPrefill().then((prefill) => {
+      if (!prefill || touched.current) return;
+      setBudgetName(prefill.name);
+      setMonthlyBudget(formatAmountInput(String(prefill.amount)));
+      setAlertPercent(prefill.alertPercentage);
+      setMembersCanAddExpenses(prefill.membersCanAddExpenses);
+      setPrefillLabel(getMonthYearLabel(monthDate(getPreviousMonthKey(monthKey))));
+    });
+  }, [budgetStatus, isAdmin, loadPrefill, monthKey]);
+
+  // Drag (or tap) on the alert slider, through a transparent touch area around the existing track.
+  const trackRef = useRef<View>(null);
+  const trackBounds = useRef({ left: 0, width: 0 });
+  const setAlertFromPageX = (pageX: number) => {
+    const { left, width } = trackBounds.current;
+    if (width <= 0) return;
+    touched.current = true;
+    setAlertPercent(clampAlertPercentage(((pageX - left) / width) * 100));
+  };
 
   const handleBack = () => router.back();
   const handleCancel = () => router.back();
-  // TODO: wire up once there's a real budget data source to save to.
-  const handleSaveChanges = () => router.back();
-  // TODO: build a real period picker.
+  const handleSaveChanges = async () => {
+    if (!canEdit) return;
+    setErrorText(null);
+    setSaving(true);
+    try {
+      await saveBudget({
+        name: budgetName,
+        amountText: monthlyBudget,
+        alertPercentage: alertPercent,
+        membersCanAddExpenses,
+      });
+      router.back();
+    } catch (error) {
+      setErrorText(getBudgetErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+  // The period is Monthly only and the start date is the 1st of the current month for now.
   const handleBudgetPeriodPress = () => {};
-  // TODO: build a real date picker.
   const handleStartDatePress = () => {};
-  // TODO: build real category add/remove.
+  // TODO: build real category add/remove (category budget phase).
   const handleAddCategory = () => {};
 
-  const alertAmount = Math.round(
-    (Number(monthlyBudget.replace(/,/g, "")) || 0) * (ALERT_THRESHOLD_PERCENT / 100),
-  );
+  const alertAmount = getAlertAmount(parseBudgetAmount(monthlyBudget) ?? 0, alertPercent);
+
+  const monthLabel = getMonthYearLabel(monthDate(monthKey));
+  const startDateLabel = `01 ${monthLabel.slice(0, 3)} ${monthLabel.split(" ")[1]}`;
+  const memberCount = activeMembers.length;
+  const subtitle =
+    memberCount > 1 ? `Changes apply to all ${memberCount} members` : "Changes apply to your whole family";
+
+  const noteText =
+    budgetStatus === "error" || familyStatus === "error" || familyStatus === "missing"
+      ? "Couldn't load the budget. Please try again later."
+      : !loaded
+        ? "Loading this month's budget…"
+        : !isAdmin
+          ? "Only the family admin can edit the budget."
+          : prefillLabel
+            ? `Pre-filled from ${prefillLabel}. Save to set ${monthLabel}'s budget.`
+            : budgetStatus === "none"
+              ? `No budget set for ${monthLabel} yet.`
+              : null;
 
   return (
     <View style={styles.root}>
@@ -52,15 +154,21 @@ export default function EditFamilyBudgetScreen() {
             </Pressable>
             <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>Edit Family Budget</Text>
-              <Text style={styles.headerSubtitle}>Changes apply to all 4 members</Text>
+              <Text style={styles.headerSubtitle}>{subtitle}</Text>
             </View>
           </View>
+          {noteText ? <Text style={styles.noteText}>{noteText}</Text> : null}
 
           <Text style={styles.fieldLabel}>BUDGET NAME</Text>
           <TextInput
             style={styles.textInput}
             value={budgetName}
-            onChangeText={setBudgetName}
+            onChangeText={(text) => {
+              touched.current = true;
+              setBudgetName(text);
+            }}
+            editable={canEdit}
+            maxLength={100}
             placeholder="Budget name"
           />
 
@@ -72,8 +180,13 @@ export default function EditFamilyBudgetScreen() {
             <TextInput
               style={styles.monthlyBudgetInput}
               value={monthlyBudget}
-              onChangeText={setMonthlyBudget}
-              keyboardType="numeric"
+              onChangeText={(text) => {
+                touched.current = true;
+                setMonthlyBudget(formatAmountInput(text));
+              }}
+              editable={canEdit}
+              placeholder="0"
+              keyboardType="number-pad"
             />
           </View>
 
@@ -88,7 +201,7 @@ export default function EditFamilyBudgetScreen() {
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>START DATE</Text>
               <Pressable onPress={handleStartDatePress} style={styles.dropdownField}>
-                <Text style={styles.dropdownText}>01 Sep 2026</Text>
+                <Text style={styles.dropdownText}>{startDateLabel}</Text>
                 <Text style={styles.dropdownEmoji}>📅</Text>
               </Pressable>
             </View>
@@ -112,12 +225,28 @@ export default function EditFamilyBudgetScreen() {
           <Text style={styles.fieldLabel}>ALERT WHEN SPENDING REACHES</Text>
           <View style={styles.alertCard}>
             <View style={styles.alertHeaderRow}>
-              <Text style={styles.alertLabel}>{ALERT_THRESHOLD_PERCENT}% of budget</Text>
+              <Text style={styles.alertLabel}>{alertPercent}% of budget</Text>
               <Text style={styles.alertAmount}>Rs {alertAmount.toLocaleString("en-US")}</Text>
             </View>
-            <View style={styles.sliderTrack}>
-              <View style={[styles.sliderFill, { width: `${ALERT_THRESHOLD_PERCENT}%` }]} />
-              <View style={[styles.sliderThumb, { left: `${ALERT_THRESHOLD_PERCENT}%` }]} />
+            {/* Invisible padding around the track gives the slider a comfortable touch area. */}
+            <View
+              style={styles.sliderTouchArea}
+              onStartShouldSetResponder={() => canEdit}
+              onMoveShouldSetResponder={() => canEdit}
+              onResponderTerminationRequest={() => false}
+              onResponderGrant={(event) => {
+                const pageX = event.nativeEvent.pageX;
+                trackRef.current?.measure((_x, _y, width, _height, left) => {
+                  trackBounds.current = { left, width };
+                  setAlertFromPageX(pageX);
+                });
+              }}
+              onResponderMove={(event) => setAlertFromPageX(event.nativeEvent.pageX)}
+            >
+              <View ref={trackRef} style={styles.sliderTrack}>
+                <View style={[styles.sliderFill, { width: `${alertPercent}%` }]} />
+                <View style={[styles.sliderThumb, { left: `${alertPercent}%` }]} />
+              </View>
             </View>
           </View>
 
@@ -128,17 +257,27 @@ export default function EditFamilyBudgetScreen() {
             </View>
             <Switch
               value={membersCanAddExpenses}
-              onValueChange={setMembersCanAddExpenses}
+              onValueChange={(value) => {
+                touched.current = true;
+                setMembersCanAddExpenses(value);
+              }}
+              disabled={!canEdit}
               trackColor={{ false: "#d8dde3", true: "#00c46a" }}
               thumbColor="#ffffff"
             />
           </View>
 
+          {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
+
           <View style={styles.actionsRow}>
             <Pressable onPress={handleCancel} style={styles.cancelButton}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={handleSaveChanges} style={styles.saveButton}>
+            <Pressable
+              onPress={handleSaveChanges}
+              disabled={!canEdit}
+              style={[styles.saveButton, !canEdit && styles.saveButtonDisabled]}
+            >
               <Text style={styles.saveButtonText}>Save Changes</Text>
             </Pressable>
           </View>
@@ -151,6 +290,31 @@ export default function EditFamilyBudgetScreen() {
 }
 
 const styles = StyleSheet.create({
+  noteText: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: "500",
+    textAlign: "center",
+    color: "#8a93a0",
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 12.5,
+    fontWeight: "500",
+    textAlign: "center",
+    color: "#c2410c",
+  },
+  sliderTouchArea: {
+    // Padding and negative margin cancel out, so the layout is unchanged.
+    paddingVertical: 14,
+    marginVertical: -14,
+    paddingHorizontal: 12,
+    marginHorizontal: -12,
+  },
+  saveButtonDisabled: {
+    opacity: 0.4,
+  },
+
   root: {
     flex: 1,
     backgroundColor: "#ffffff",

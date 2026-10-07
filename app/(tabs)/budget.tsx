@@ -7,12 +7,20 @@ import { Icon } from "../../components/Icon";
 import { MemberInitialsAvatar } from "../../components/MemberInitialsAvatar";
 import { ProgressBar } from "../../components/ProgressBar";
 import { SharedActivityRow } from "../../components/SharedActivityRow";
+import { useBudget } from "../../context/BudgetContext";
 import { useFamily } from "../../context/FamilyContext";
+import { getBudgetStanding, type BudgetStanding } from "../../utils/budget";
 import { getAvatarPalette, getInitials, getMonthYearLabel } from "../../utils/members";
 
-const MONTHLY_BUDGET = 100000;
-const MONTHLY_SPENT = 65000;
-const MONTHLY_LEFT = MONTHLY_BUDGET - MONTHLY_SPENT;
+// Nothing is spent until the expense phase provides real totals.
+const MONTHLY_SPENT = 0;
+
+const STANDING_LABEL: Record<BudgetStanding, string> = {
+  "not-set": "Not set",
+  "on-track": "On track",
+  "near-limit": "Near limit",
+  over: "Over budget",
+};
 
 type MemberData = {
   initials: string;
@@ -55,6 +63,24 @@ const SHARED_ACTIVITY: ActivityData[] = [
 
 export default function FamilyBudgetScreen() {
   const { status: familyStatus, family, members, isAdmin } = useFamily();
+  const { status: budgetStatus, budget } = useBudget();
+
+  const monthlyBudget = budget?.amount ?? 0;
+  const monthlyLeft = monthlyBudget - MONTHLY_SPENT;
+  const badgeText =
+    budgetStatus === "loading" || budgetStatus === "idle"
+      ? "Loading"
+      : budgetStatus === "error"
+        ? "Unavailable"
+        : STANDING_LABEL[getBudgetStanding(budget, MONTHLY_SPENT)];
+  const budgetHint =
+    budgetStatus === "none"
+      ? isAdmin
+        ? "Tap to set this month's budget"
+        : "Your family admin hasn't set this month's budget yet"
+      : budgetStatus === "error"
+        ? "Couldn't load this month's budget"
+        : null;
 
   const memberRows = useMemo<(MemberData & { key: string })[]>(
     () =>
@@ -76,6 +102,7 @@ export default function FamilyBudgetScreen() {
   );
 
   const handleBack = () => router.back();
+  const handleEditBudget = () => router.push("/edit-family-budget");
   const handleInvite = () => router.push("/shared-expenses");
   const handleAddSharedExpense = () => router.push("/shared-expenses");
   const handleBillsReminders = () => router.push("/recurring-bills");
@@ -104,18 +131,22 @@ export default function FamilyBudgetScreen() {
         </View>
 
         {/* Monthly Shared Budget */}
-        <View style={styles.monthlyCard}>
+        <Pressable
+          onPress={handleEditBudget}
+          disabled={!isAdmin}
+          style={styles.monthlyCard}
+        >
           <View style={styles.monthlyHeaderRow}>
             <Text style={styles.monthlyLabel}>Monthly Shared Budget</Text>
             <View style={styles.onTrackBadge}>
-              <Text style={styles.onTrackText}>On track</Text>
+              <Text style={styles.onTrackText}>{badgeText}</Text>
             </View>
           </View>
           <Text style={styles.monthlyAmount}>
-            Rs {MONTHLY_BUDGET.toLocaleString("en-US")}
+            Rs {monthlyBudget.toLocaleString("en-US")}
           </Text>
           <ProgressBar
-            progress={MONTHLY_SPENT / MONTHLY_BUDGET}
+            progress={monthlyBudget > 0 ? MONTHLY_SPENT / monthlyBudget : 0}
             height={8}
             trackColor="rgba(255,255,255,0.14)"
             fillColor="#00c46a"
@@ -131,11 +162,12 @@ export default function FamilyBudgetScreen() {
             <Text style={styles.monthlyFooterText}>
               Left{" "}
               <Text style={styles.monthlyFooterBold}>
-                Rs {MONTHLY_LEFT.toLocaleString("en-US")}
+                Rs {monthlyLeft.toLocaleString("en-US")}
               </Text>
             </Text>
           </View>
-        </View>
+          {budgetHint ? <Text style={styles.monthlyHint}>{budgetHint}</Text> : null}
+        </Pressable>
 
         {/* Members */}
         <View style={styles.membersCard}>
@@ -364,6 +396,11 @@ const styles = StyleSheet.create({
   },
   monthlyFooterBold: {
     fontWeight: "700",
+  },
+  monthlyHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.85)",
   },
   membersCard: {
     marginTop: 16,

@@ -40,6 +40,28 @@ export function validateInviteContact(value: string): string | null {
   return validateEmail(value);
 }
 
+export const MAX_BUDGET_AMOUNT = 100_000_000; // keep in sync with firestore.rules
+
+export function validateBudgetName(name: string): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return "Please enter a budget name.";
+  if (trimmed.length > MAX_NAME_LENGTH) return `Budget name must be ${MAX_NAME_LENGTH} characters or fewer.`;
+  return null;
+}
+
+/** The amount is typed as text ("100,000"); budgets are whole rupees. */
+export function validateBudgetAmount(text: string): string | null {
+  const digits = text.replace(/[,\s]/g, "");
+  if (digits.length === 0) return "Please enter the monthly budget.";
+  if (!/^\d+$/.test(digits)) return "Enter the budget as a whole number of rupees.";
+  const value = Number(digits);
+  if (value < 1) return "The monthly budget must be greater than Rs 0.";
+  if (value > MAX_BUDGET_AMOUNT) {
+    return `The monthly budget can't be more than Rs ${MAX_BUDGET_AMOUNT.toLocaleString("en-US")}.`;
+  }
+  return null;
+}
+
 /** Login only needs a password to be present; Firebase decides whether it is correct. */
 export function validateLoginPassword(password: string): string | null {
   return password.length === 0 ? "Please enter your password." : null;

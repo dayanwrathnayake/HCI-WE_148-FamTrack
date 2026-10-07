@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { BillsProvider } from "../context/BillsContext";
+import { BudgetProvider } from "../context/BudgetContext";
 import { ExpenseProvider } from "../context/ExpenseContext";
 import { FamilyProvider } from "../context/FamilyContext";
 import { SavingsProvider } from "../context/SavingsContext";
@@ -66,13 +67,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <FamilyProvider>
-          <ExpenseProvider>
-            <SavingsProvider>
-              <BillsProvider>
-                <RootNavigator />
-              </BillsProvider>
-            </SavingsProvider>
-          </ExpenseProvider>
+          <BudgetProvider>
+            <ExpenseProvider>
+              <SavingsProvider>
+                <BillsProvider>
+                  <RootNavigator />
+                </BillsProvider>
+              </SavingsProvider>
+            </ExpenseProvider>
+          </BudgetProvider>
         </FamilyProvider>
       </AuthProvider>
     </SafeAreaProvider>
