@@ -1,19 +1,34 @@
 import { Text, View } from "react-native";
-import { SavingGoal } from "../constants/savings";
-import { MemberAvatar } from "./MemberAvatar";
+import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
 import { ProgressBar } from "./ProgressBar";
+import { useFamily } from "../context/FamilyContext";
+import { LiveSavingGoal } from "../context/SavingsContext";
+import { getAvatarPalette, getInitials } from "../utils/members";
 
 type Props = {
-  goal: SavingGoal;
+  goal: LiveSavingGoal;
 };
 
 export function SavingGoalCard({ goal }: Props) {
-  const progressRatio = Math.min(goal.savedAmount / goal.targetAmount, 1);
+  const { members } = useFamily();
+
+  const target = Math.max(goal.targetAmount, 1);
+  const saved = goal.savedAmount || 0;
+  const rawRatio = saved / target;
+  const progressRatio = Math.min(rawRatio, 1);
+
   const percentage = (progressRatio * 100).toFixed(
     (progressRatio * 100) % 1 === 0 ? 0 : 1,
   );
+  const multiplier = rawRatio.toFixed(1);
 
-  const multiplier = progressRatio.toFixed(1);
+  const contributorList = (goal.contributors || []).map((id) => {
+    const member = members.find((m) => m.id === id);
+    return {
+      id,
+      name: member?.displayName || "Member",
+    };
+  });
 
   return (
     <View
@@ -27,13 +42,16 @@ export function SavingGoalCard({ goal }: Props) {
         <View className="flex-row items-center gap-3 flex-1 mr-2">
           <View
             className="w-[42px] h-[42px] rounded-full items-center justify-center"
-            style={{ backgroundColor: goal.iconBg }}
+            style={{ backgroundColor: goal.iconBg || "#e8f8f0" }}
           >
-            <Text className="text-[18px]">{goal.iconEmoji}</Text>
+            <Text className="text-[18px]">{goal.iconEmoji || "🎯"}</Text>
           </View>
 
           <View className="flex-1">
-            <Text className="text-[15px] font-bold text-[#111827]">
+            <Text
+              className="text-[15px] font-bold text-[#111827]"
+              numberOfLines={1}
+            >
               {goal.title}
             </Text>
             <Text className="text-[12px] font-medium text-[#64748b] mt-0.5">
@@ -43,14 +61,47 @@ export function SavingGoalCard({ goal }: Props) {
         </View>
 
         <View className="flex-row items-center">
-          {goal.contributorAvatars.map((avatarSource, idx) => (
-            <MemberAvatar
-              key={idx}
-              source={avatarSource}
-              size={24}
-              overlap={idx > 0}
-            />
-          ))}
+          {contributorList.slice(0, 4).map((c, idx) => {
+            const palette = getAvatarPalette(c.id);
+            const initials = getInitials(c.name);
+
+            return (
+              <View
+                key={c.id}
+                style={{
+                  marginLeft: idx > 0 ? -8 : 0,
+                  zIndex: 10 - idx,
+                  borderWidth: 1.5,
+                  borderColor: "#ffffff",
+                  borderRadius: 13,
+                }}
+              >
+                <MemberInitialsAvatar
+                  initials={initials}
+                  backgroundColor={palette.background}
+                  textColor={palette.text}
+                  size={24}
+                />
+              </View>
+            );
+          })}
+          {contributorList.length > 4 && (
+            <View
+              className="items-center justify-center bg-gray-100 rounded-full"
+              style={{
+                marginLeft: -8,
+                zIndex: 5,
+                width: 24,
+                height: 24,
+                borderWidth: 1.5,
+                borderColor: "#ffffff",
+              }}
+            >
+              <Text className="text-[10px] font-bold text-gray-600">
+                +{contributorList.length - 4}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -70,7 +121,7 @@ export function SavingGoalCard({ goal }: Props) {
 
       <View className="flex-row items-center justify-between pt-1">
         <Text className="text-[12px] font-semibold text-[#64748b]">
-          RS {goal.savedAmount.toLocaleString("en-US")} saved
+          RS {saved.toLocaleString("en-US")} saved
         </Text>
         <Text className="text-[12px] font-bold text-[#00c46a]">
           {multiplier}x multiplier

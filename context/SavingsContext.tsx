@@ -1,53 +1,103 @@
-import React, { createContext, useContext, useState } from "react";
-import { ImageSourcePropType } from "react-native";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useAuth } from "./AuthContext";
+import { useFamily } from "./FamilyContext";
 import {
-  MOCK_SAVING_GOALS,
-  MOCK_SAVINGS_SUMMARY,
-  SavingGoal,
-} from "../constants/savings";
+  createSavingGoal,
+  CreateSavingGoalInput,
+  SavingGoalDoc,
+  subscribeToFamilySavingGoals,
+} from "../services/savingsService";
 
-export type NewGoalInput = {
-  title: string;
-  targetAmount: number;
-  initialDeposit?: number;
-  iconEmoji: string;
-  iconBg: string;
-  contributors: ImageSourcePropType[];
-};
+export type LiveSavingGoal = SavingGoalDoc & { id: string };
 
 type SavingsContextType = {
-  goals: SavingGoal[];
+  goals: LiveSavingGoal[];
   totalSavings: number;
-  addGoal: (goal: NewGoalInput) => void;
+  loading: boolean;
+  addGoal: (
+    input: Omit<CreateSavingGoalInput, "familyId" | "createdBy">,
+  ) => Promise<string>;
 };
 
 const SavingsContext = createContext<SavingsContextType | undefined>(undefined);
 
 export function SavingsProvider({ children }: { children: React.ReactNode }) {
-  const [goals, setGoals] = useState<SavingGoal[]>(MOCK_SAVING_GOALS);
+  const { user } = useAuth();
+  const { family } = useFamily();
+  const familyId = family?.id ?? null;
 
-  const totalSavings =
-    MOCK_SAVINGS_SUMMARY.totalSavings +
-    goals
-      .slice(MOCK_SAVING_GOALS.length)
-      .reduce((sum, g) => sum + g.savedAmount, 0);
+  const [syncedState, setSyncedState] = useState<{
+    familyId: string | null;
+    goals: LiveSavingGoal[];
+  }>({
+    familyId: null,
+    goals: [],
+  });
 
-  const addGoal = (input: NewGoalInput) => {
-    const newGoal: SavingGoal = {
-      id: `goal_${Date.now()}`,
-      title: input.title,
-      targetAmount: input.targetAmount,
-      savedAmount: input.initialDeposit || 0,
-      iconBg: input.iconBg,
-      iconEmoji: input.iconEmoji,
-      contributorAvatars: input.contributors,
+  useEffect(() => {
+    if (!familyId) return;
+
+    const unsubscribe = subscribeToFamilySavingGoals(
+      familyId,
+      (liveGoals) => {
+        setSyncedState({ familyId, goals: liveGoals });
+      },
+      () => {
+        setSyncedState({ familyId, goals: [] });
+      },
+    );
+
+    return () => {
+      unsubscribe();
     };
+  }, [familyId]);
 
-    setGoals((prev) => [newGoal, ...prev]);
-  };
+  const goals = useMemo(
+    () =>
+      familyId && syncedState.familyId === familyId ? syncedState.goals : [],
+    [familyId, syncedState],
+  );
+
+  const loading = Boolean(familyId && syncedState.familyId !== familyId);
+
+  const totalSavings = useMemo(
+    () => goals.reduce((sum, g) => sum + (g.savedAmount || 0), 0),
+    [goals],
+  );
+
+  const addGoal = useCallback(
+    async (
+      input: Omit<CreateSavingGoalInput, "familyId" | "createdBy">,
+    ): Promise<string> => {
+      if (!familyId || !user) {
+        throw new Error(
+          "You must be part of a family to create a saving goal.",
+        );
+      }
+
+      return createSavingGoal({
+        ...input,
+        familyId,
+        createdBy: user.uid,
+      });
+    },
+    [familyId, user],
+  );
+
+  const contextValue = useMemo(
+    () => ({ goals, totalSavings, loading, addGoal }),
+    [goals, totalSavings, loading, addGoal],
+  );
 
   return (
-    <SavingsContext.Provider value={{ goals, totalSavings, addGoal }}>
+    <SavingsContext.Provider value={contextValue}>
       {children}
     </SavingsContext.Provider>
   );

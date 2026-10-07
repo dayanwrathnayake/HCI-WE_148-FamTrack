@@ -1,6 +1,7 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -11,8 +12,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
-import { ALL_MEMBERS, Member } from "../constants/expense";
+import { useFamily } from "../context/FamilyContext";
 import { useSavings } from "../context/SavingsContext";
+import type { MemberRecord } from "../utils/members";
 
 type GoalCategory = {
   key: string;
@@ -31,6 +33,9 @@ const GOAL_CATEGORIES: GoalCategory[] = [
 ];
 
 export default function CreateGoalScreen() {
+  const { family, activeMembers, currentMember } = useFamily();
+  const { addGoal } = useSavings();
+
   const [goalTitle, setGoalTitle] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [initialDeposit, setInitialDeposit] = useState("");
@@ -39,14 +44,22 @@ export default function CreateGoalScreen() {
   const [selectedCategory, setSelectedCategory] = useState<GoalCategory | null>(
     null,
   );
-  const [contributors, setContributors] = useState<Member[]>([]);
-  const { addGoal } = useSavings();
+  const [selectedContributors, setSelectedContributors] = useState<
+    MemberRecord[]
+  >([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  const contributors = useMemo(() => {
+    if (selectedContributors.length > 0) return selectedContributors;
+    return currentMember ? [currentMember] : [];
+  }, [selectedContributors, currentMember]);
 
   const isValid =
     goalTitle.trim().length > 0 &&
     targetAmount.trim().length > 0 &&
     Number(targetAmount.replace(/,/g, "")) > 0 &&
-    selectedCategory !== null;
+    selectedCategory !== null &&
+    contributors.length > 0;
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -76,31 +89,47 @@ export default function CreateGoalScreen() {
         let month =
           parseInt(digits.slice(2, 4), 10) > 12 ? "12" : digits.slice(2, 4);
         formatted = `${day}/${month}`;
-        if (digits.length >= 5)
+        if (digits.length >= 5) {
           formatted = `${day}/${month}/${digits.slice(4, 8)}`;
+        }
       }
     }
     setTargetDate(formatted);
   };
 
-  const handleCreateGoal = () => {
-    if (!isValid || !selectedCategory) return;
+  const handleCreateGoal = async () => {
+    if (!isValid || !selectedCategory || !family) return;
 
-    addGoal({
-      title: goalTitle.trim(),
-      targetAmount: Number(targetAmount.replace(/,/g, "")),
-      initialDeposit: initialDeposit
-        ? Number(initialDeposit.replace(/,/g, ""))
-        : 0,
-      iconEmoji: selectedCategory.emoji,
-      iconBg: selectedCategory.bg,
-      contributors:
-        contributors.length > 0
-          ? contributors.map((c) => c.avatar)
-          : [ALL_MEMBERS[0].avatar],
-    });
+    try {
+      setSubmitting(true);
+      const parsedTarget = Math.max(
+        0,
+        Math.round(Number(targetAmount.replace(/,/g, ""))),
+      );
+      const parsedInitial = initialDeposit
+        ? Math.max(0, Math.round(Number(initialDeposit.replace(/,/g, ""))))
+        : 0;
 
-    handleBack();
+      await addGoal({
+        title: goalTitle.trim(),
+        targetAmount: parsedTarget,
+        initialDeposit: parsedInitial,
+        iconEmoji: selectedCategory.emoji,
+        iconBg: selectedCategory.bg,
+        contributors: contributors.map((c) => c.id),
+        targetDate: targetDate.trim(),
+        note: note.trim(),
+      });
+
+      handleBack();
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error.message || "Failed to create goal. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -145,7 +174,6 @@ export default function CreateGoalScreen() {
           <View className="flex-row flex-wrap gap-2">
             {GOAL_CATEGORIES.map((cat) => {
               const active = selectedCategory?.key === cat.key;
-
               return (
                 <Pressable
                   key={cat.key}
@@ -183,7 +211,7 @@ export default function CreateGoalScreen() {
                   value={targetAmount}
                   onChangeText={(t) => handleAmountChange(t, setTargetAmount)}
                   keyboardType="numeric"
-                  placeholder="300,000"
+                  placeholder="0"
                   placeholderTextColor="#9ca3af"
                 />
               </View>
@@ -195,7 +223,7 @@ export default function CreateGoalScreen() {
               </Text>
               <View className="flex-row items-center h-[48px] rounded-[14px] border border-[#e1e5ea] bg-white px-3.5">
                 <TextInput
-                  className="flex-1 min-w-0 text-[13px] font-medium text-[#1f2937] p-0 outline-none"
+                  className="flex-1 min-w-0 text-[14px] font-medium text-[#1f2937] p-0 outline-none"
                   value={targetDate}
                   onChangeText={handleDateChange}
                   placeholder="DD/MM/YYYY"
@@ -218,39 +246,42 @@ export default function CreateGoalScreen() {
               value={initialDeposit}
               onChangeText={(t) => handleAmountChange(t, setInitialDeposit)}
               keyboardType="numeric"
-              placeholder="0 (Start with a deposit)"
+              placeholder="0 (e.g. 50,000)"
               placeholderTextColor="#9ca3af"
             />
           </View>
 
           <MemberSelector
-            label="Contributing Family Members"
+            label="Contributors"
             selectedMembers={contributors}
-            allMembers={ALL_MEMBERS}
-            onAdd={(m) => setContributors((p) => [...p, m])}
-            onRemove={(k) =>
-              setContributors((p) => p.filter((x) => x.key !== k))
+            allMembers={activeMembers}
+            onAdd={(m) => setSelectedContributors((p) => [...p, m])}
+            onRemove={(id) =>
+              setSelectedContributors((p) =>
+                contributors.filter((x) => x.id !== id),
+              )
             }
           />
 
           <Text className="text-[13px] font-semibold text-[#1f2937] mt-4 mb-1.5">
-            Goal Description / Note
+            Purpose / Note (Optional)
           </Text>
           <TextInput
-            className="h-[68px] rounded-[14px] border border-[#e1e5ea] bg-white px-3.5 pt-3 text-[14px] text-[#111827] outline-none"
+            className="h-[76px] rounded-[14px] border border-[#e1e5ea] bg-white px-3.5 pt-3 text-[14px] text-[#111827] outline-none"
             value={note}
             onChangeText={setNote}
-            placeholder="Add a milestone plan or description..."
+            placeholder="e.g. For family year-end holiday..."
             placeholderTextColor="#9ca3af"
             multiline
             textAlignVertical="top"
           />
         </View>
 
-        <View className="flex-row gap-3 mt-1">
+        <View className="flex-row gap-3 mt-2">
           <Pressable
-            className="flex-1 h-[50px] rounded-full items-center justify-center bg-white border border-gray-300 shadow-sm shadow-black/5 elevation-1"
+            className="flex-1 h-[50px] rounded-full items-center justify-center bg-white border border-gray-300 shadow-sm shadow-black/5"
             onPress={handleBack}
+            disabled={submitting}
           >
             <Text className="text-[15px] font-semibold text-gray-700">
               Cancel
@@ -258,20 +289,21 @@ export default function CreateGoalScreen() {
           </Pressable>
 
           <Pressable
-            className="flex-[1.4] h-[50px] rounded-full items-center justify-center"
+            className="flex-[1.4] h-[50px] rounded-full items-center justify-center flex-row gap-2"
             style={{
-              backgroundColor: isValid ? "#05bf78" : "#a0d9c0",
+              backgroundColor: isValid && !submitting ? "#05bf78" : "#a0d9c0",
               shadowColor: isValid ? "#00c46a" : "transparent",
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: isValid ? 0.3 : 0,
               shadowRadius: 8,
               elevation: isValid ? 4 : 0,
             }}
-            disabled={!isValid}
+            disabled={!isValid || submitting}
             onPress={handleCreateGoal}
           >
+            {submitting && <ActivityIndicator color="#ffffff" size="small" />}
             <Text className="text-[15px] font-bold text-white">
-              Create Goal
+              {submitting ? "Saving..." : "Create Goal"}
             </Text>
           </Pressable>
         </View>
