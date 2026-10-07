@@ -1,25 +1,38 @@
 import { useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
-import { Member } from "../constants/expense";
+import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
+import { getAvatarPalette, getInitials } from "../utils/members";
 
-type Props = {
-  label: string;
-  selectedMembers: Member[];
-  allMembers: Member[];
-  onAdd: (member: Member) => void;
-  onRemove: (key: string) => void;
+export type SelectableMember = {
+  id?: string;
+  key?: string;
+  name?: string;
+  displayName?: string;
+  avatar?: any;
 };
 
-export function MemberSelector({
+type Props<T extends SelectableMember> = {
+  label: string;
+  selectedMembers: T[];
+  allMembers: T[];
+  onAdd: (member: T) => void;
+  onRemove: (idOrKey: string) => void;
+};
+
+export function MemberSelector<T extends SelectableMember>({
   label,
   selectedMembers,
   allMembers,
   onAdd,
   onRemove,
-}: Props) {
+}: Props<T>) {
   const [showPicker, setShowPicker] = useState(false);
+
+  const getMemberId = (m: T) => m.id || m.key || "";
+  const getMemberName = (m: T) => m.displayName || m.name || "";
+
   const available = allMembers.filter(
-    (m) => !selectedMembers.some((s) => s.key === m.key),
+    (m) => !selectedMembers.some((s) => getMemberId(s) === getMemberId(m)),
   );
 
   return (
@@ -29,26 +42,42 @@ export function MemberSelector({
       </Text>
 
       <View className="flex-row flex-wrap items-center gap-2">
-        {selectedMembers.map((m) => (
-          <View
-            key={m.key}
-            className="flex-row items-center gap-1.5 h-[34px] rounded-full px-2.5 bg-[#e8f8f0] border border-[#9de3c0]"
-          >
-            <Image
-              source={m.avatar}
-              style={{ width: 22, height: 22, borderRadius: 11 }}
-              resizeMode="cover"
-            />
-            <Text className="text-[13px] font-semibold text-[#00854b]">
-              {m.name}
-            </Text>
-            <Pressable onPress={() => onRemove(m.key)} hitSlop={6}>
-              <Text className="text-[11px] font-bold text-[#00854b] ml-0.5">
-                ✕
+        {selectedMembers.map((m) => {
+          const id = getMemberId(m);
+          const name = getMemberName(m);
+          const palette = getAvatarPalette(id);
+          const initials = getInitials(name);
+
+          return (
+            <View
+              key={id}
+              className="flex-row items-center gap-1.5 h-[34px] rounded-full pl-1.5 pr-2.5 bg-[#e8f8f0] border border-[#9de3c0]"
+            >
+              {m.avatar ? (
+                <Image
+                  source={m.avatar}
+                  style={{ width: 22, height: 22, borderRadius: 11 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <MemberInitialsAvatar
+                  initials={initials}
+                  backgroundColor={palette.background}
+                  textColor={palette.text}
+                  size={22}
+                />
+              )}
+              <Text className="text-[13px] font-semibold text-[#00854b]">
+                {name}
               </Text>
-            </Pressable>
-          </View>
-        ))}
+              <Pressable onPress={() => onRemove(id)} hitSlop={6}>
+                <Text className="text-[11px] font-bold text-[#00854b] ml-0.5">
+                  ✕
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
 
         {available.length > 0 && (
           <Pressable
@@ -64,25 +93,41 @@ export function MemberSelector({
 
       {showPicker && available.length > 0 && (
         <View className="flex-row flex-wrap gap-2 mt-2.5 p-2 rounded-xl bg-gray-50 border border-gray-200">
-          {available.map((m) => (
-            <Pressable
-              key={m.key}
-              onPress={() => {
-                onAdd(m);
-                setShowPicker(false);
-              }}
-              className="flex-row items-center gap-1.5 h-[32px] rounded-full px-2.5 bg-white border border-gray-300"
-            >
-              <Image
-                source={m.avatar}
-                style={{ width: 20, height: 20, borderRadius: 10 }}
-                resizeMode="cover"
-              />
-              <Text className="text-[12px] font-medium text-gray-700">
-                {m.name}
-              </Text>
-            </Pressable>
-          ))}
+          {available.map((m) => {
+            const id = getMemberId(m);
+            const name = getMemberName(m);
+            const palette = getAvatarPalette(id);
+            const initials = getInitials(name);
+
+            return (
+              <Pressable
+                key={id}
+                onPress={() => {
+                  onAdd(m);
+                  setShowPicker(false);
+                }}
+                className="flex-row items-center gap-1.5 h-[32px] rounded-full pl-1.5 pr-2.5 bg-white border border-gray-300"
+              >
+                {m.avatar ? (
+                  <Image
+                    source={m.avatar}
+                    style={{ width: 20, height: 20, borderRadius: 10 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <MemberInitialsAvatar
+                    initials={initials}
+                    backgroundColor={palette.background}
+                    textColor={palette.text}
+                    size={20}
+                  />
+                )}
+                <Text className="text-[12px] font-medium text-gray-700">
+                  {name}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </View>

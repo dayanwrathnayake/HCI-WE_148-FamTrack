@@ -1,34 +1,49 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CategoryPicker } from "../components/CategoryPicker";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
 import { ReceiptPicker } from "../components/ReceiptPicker";
+import { CategoryOption } from "../constants/expense";
 import { useExpenses } from "../context/ExpenseContext";
-import {
-  ALL_MEMBERS,
-  CATEGORIES,
-  CategoryOption,
-  Member,
-} from "../constants/expense";
+import { useFamily } from "../context/FamilyContext";
+import type { MemberRecord } from "../utils/members";
 
 export default function AddExpenseScreen() {
+  const { family, activeMembers, currentMember } = useFamily();
+  const { addExpense } = useExpenses();
+
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
-  const { addExpense } = useExpenses();
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
-
+  const [submitting, setSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryOption | null>(null);
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  const [payers, setPayers] = useState<Member[]>([]);
-  const [splitMembers, setSplitMembers] = useState<Member[]>([]);
+  const [selectedPayers, setSelectedPayers] = useState<MemberRecord[]>([]);
+  const [splitMembers, setSplitMembers] = useState<MemberRecord[]>([]);
+
+  const payers = useMemo(() => {
+    if (selectedPayers.length > 0) return selectedPayers;
+    return currentMember ? [currentMember] : [];
+  }, [selectedPayers, currentMember]);
 
   const isValid =
-    amount.trim().length > 0 && Number(amount) > 0 && selectedCategory !== null;
+    amount.trim().length > 0 &&
+    Number(amount.replace(/,/g, "")) > 0 &&
+    selectedCategory !== null &&
+    payers.length > 0;
 
   const handleAmountChange = (text: string) => {
     const rawNumber = text.replace(/[^0-9]/g, "");
@@ -36,8 +51,7 @@ export default function AddExpenseScreen() {
       setAmount("");
       return;
     }
-    const formatted = Number(rawNumber).toLocaleString("en-US");
-    setAmount(formatted);
+    setAmount(Number(rawNumber).toLocaleString("en-US"));
   };
 
   const handleDateChange = (text: string) => {
@@ -51,42 +65,79 @@ export default function AddExpenseScreen() {
         let month =
           parseInt(digits.slice(2, 4), 10) > 12 ? "12" : digits.slice(2, 4);
         formatted = `${day}/${month}`;
-        if (digits.length >= 5)
+        if (digits.length >= 5) {
           formatted = `${day}/${month}/${digits.slice(4, 8)}`;
+        }
       }
     }
     setDate(formatted);
   };
 
   const handleBack = () => {
-    try {
+    if (router.canGoBack()) {
       router.back();
-    } catch {
+    } else {
       router.replace("/(tabs)/home");
     }
   };
 
-  const handleAddExpense = () => {
-    if (!isValid || !selectedCategory) return;
+  const handleAddExpense = async () => {
+    if (
+      !isValid ||
+      !selectedCategory ||
+      payers.length === 0 ||
+      !family ||
+      !currentMember
+    )
+      return;
 
-    const payerName =
-      payers.length > 0
-        ? `Paid by ${payers.map((p) => p.name.toLowerCase()).join(", ")}`
-        : "Paid by you";
+    try {
+      setSubmitting(true);
+      const parsedAmount = Math.round(Number(amount.replace(/,/g, "")));
 
-    addExpense({
-      title: note.trim() !== "" ? note.trim() : selectedCategory.label,
-      category: selectedCategory.label as any,
-      amount: Number(amount.replace(/,/g, "")),
-      date: date || "Today",
-      payerText: payerName,
-      note: note,
-      receiptUri: receiptUri,
-      status: splitMembers.length > 0 ? "Shared" : "Personal",
-      iconEmoji: selectedCategory.emoji,
-    });
+      let y: number, m: number, d: number;
+      if (date.length === 10) {
+        const parts = date.split("/").map(Number);
+        d = parts[0];
+        m = parts[1] - 1;
+        y = parts[2];
+      } else {
+        const today = new Date();
+        d = today.getDate();
+        m = today.getMonth();
+        y = today.getFullYear();
+      }
+      const utcExpenseDate = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
 
-    handleBack();
+      const isAdmin =
+        currentMember.role === "admin" ||
+        family.ownerId === currentMember.userId;
+      const calculatedStatus = isAdmin ? "Shared" : "Pending";
+
+      await addExpense({
+        title: note.trim() !== "" ? note.trim() : selectedCategory.label,
+        categoryId: selectedCategory.key,
+        amount: parsedAmount,
+        paidBy: payers[0].id,
+        splitAmong:
+          splitMembers.length > 0
+            ? splitMembers.map((mem) => mem.id)
+            : [payers[0].id],
+        status: calculatedStatus,
+        date: utcExpenseDate,
+        note: note.trim(),
+        receiptUri: receiptUri,
+      });
+
+      handleBack();
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error.message || "Failed to add expense. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -112,65 +163,11 @@ export default function AddExpenseScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="bg-white rounded-[20px] p-5 shadow-sm shadow-black/10 elevation-2">
-          <Text className="text-[13px] font-semibold text-[#111827] mb-2">
-            Expense Title
-          </Text>
+          <CategoryPicker
+            selectedCategory={selectedCategory}
+            onSelectCategory={(cat) => setSelectedCategory(cat)}
+          />
 
-          <Pressable
-            className="flex-row items-center h-[48px] rounded-[12px] border border-[#e1e5ea] px-4 gap-3 bg-white"
-            onPress={() => setShowCategoryPicker((v) => !v)}
-          >
-            {selectedCategory ? (
-              <>
-                <Text className="text-[18px]">{selectedCategory.emoji}</Text>
-                <Text className="flex-1 text-[15px] font-medium text-[#111827]">
-                  {selectedCategory.label}
-                </Text>
-              </>
-            ) : (
-              <Text className="flex-1 text-[14px] font-medium text-[#9ca3af]">
-                Select category...
-              </Text>
-            )}
-
-            <Text className="text-[14px] text-[#8a93a0]">
-              {showCategoryPicker ? "▴" : "▾"}
-            </Text>
-          </Pressable>
-
-          {showCategoryPicker && (
-            <View className="flex-row flex-wrap gap-2 mt-3">
-              {CATEGORIES.map((cat) => {
-                const active = cat.key === selectedCategory?.key;
-
-                return (
-                  <Pressable
-                    key={cat.key}
-                    onPress={() => {
-                      setSelectedCategory(cat);
-                      setShowCategoryPicker(false);
-                    }}
-                    className={`flex-row items-center gap-1.5 h-[36px] rounded-full px-3 border ${
-                      active
-                        ? "bg-[#e8f8f0] border-[#00c46a]"
-                        : "bg-white border-[#e1e5ea]"
-                    }`}
-                  >
-                    <Text className="text-[14px]">{cat.emoji}</Text>
-                    <Text
-                      className={`text-[13px] font-semibold ${
-                        active ? "text-[#00854b]" : "text-[#5d6673]"
-                      }`}
-                    >
-                      {cat.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Amount & Date */}
           <View className="flex-row gap-3 mt-4">
             <View className="flex-1">
               <Text className="text-[13px] font-semibold text-[#1f2937] mb-2">
@@ -180,7 +177,6 @@ export default function AddExpenseScreen() {
                 <Text className="text-[13px] font-semibold text-[#6b7280]">
                   RS
                 </Text>
-
                 <TextInput
                   className="flex-1 text-[15px] font-medium text-[#1f2937] p-0 outline-none"
                   value={amount}
@@ -214,28 +210,31 @@ export default function AddExpenseScreen() {
           <MemberSelector
             label="Payer"
             selectedMembers={payers}
-            allMembers={ALL_MEMBERS}
-            onAdd={(m) => setPayers((p) => [...p, m])}
-            onRemove={(k) => setPayers((p) => p.filter((x) => x.key !== k))}
+            allMembers={activeMembers}
+            onAdd={(m) => setSelectedPayers((p) => [...p, m])}
+            onRemove={(id) =>
+              setSelectedPayers((p) => payers.filter((x) => x.id !== id))
+            }
           />
+
           <MemberSelector
             label="Split between"
             selectedMembers={splitMembers}
-            allMembers={ALL_MEMBERS}
+            allMembers={activeMembers}
             onAdd={(m) => setSplitMembers((s) => [...s, m])}
-            onRemove={(k) =>
-              setSplitMembers((s) => s.filter((x) => x.key !== k))
+            onRemove={(id) =>
+              setSplitMembers((s) => s.filter((x) => x.id !== id))
             }
           />
 
           <Text className="text-[13px] font-semibold text-[#111827] mt-4 mb-2">
-            Note
+            Note / Title
           </Text>
           <TextInput
             className="h-[72px] rounded-[12px] border border-[#e1e5ea] bg-white px-3.5 pt-3 text-[14px] text-[#111827] outline-none"
             value={note}
             onChangeText={setNote}
-            placeholder="Add a note..."
+            placeholder="Add a note or custom title..."
             placeholderTextColor="#c6ccd4"
             multiline
             textAlignVertical="top"
@@ -251,7 +250,8 @@ export default function AddExpenseScreen() {
         <View className="flex-row gap-3">
           <Pressable
             className="flex-1 h-[50px] rounded-full items-center justify-center bg-white border border-gray-300 shadow-sm shadow-black/10 elevation-1"
-            onPress={() => handleBack()}
+            onPress={handleBack}
+            disabled={submitting}
           >
             <Text className="text-[15px] font-semibold text-gray-700">
               Cancel
@@ -259,20 +259,21 @@ export default function AddExpenseScreen() {
           </Pressable>
 
           <Pressable
-            className="flex-[1.4] h-[50px] rounded-full items-center justify-center"
+            className="flex-[1.4] h-[50px] rounded-full items-center justify-center flex-row gap-2"
             style={{
-              backgroundColor: isValid ? "#05bf78" : "#a0d9c0",
+              backgroundColor: isValid && !submitting ? "#05bf78" : "#a0d9c0",
               shadowColor: isValid ? "#00c46a" : "transparent",
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: isValid ? 0.3 : 0,
               shadowRadius: 8,
               elevation: isValid ? 4 : 0,
             }}
-            disabled={!isValid}
+            disabled={!isValid || submitting}
             onPress={handleAddExpense}
           >
+            {submitting && <ActivityIndicator color="#ffffff" size="small" />}
             <Text className="text-[15px] font-bold text-white">
-              Add Expense
+              {submitting ? "Saving..." : "Add Expense"}
             </Text>
           </Pressable>
         </View>
