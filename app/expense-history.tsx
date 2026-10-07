@@ -1,18 +1,25 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppBottomNav } from "../components/AppBottomNav";
-import { Icon } from "../components/Icon";
-import { useExpenses } from "../context/ExpenseContext";
 import { HistoryItemRow } from "../components/HistoryItemRow";
+import { Icon } from "../components/Icon";
 import {
   HISTORY_CATEGORIES,
   HistoryCategoryFilter,
 } from "../constants/history";
+import { useExpenses } from "../context/ExpenseContext";
 
 export default function ExpenseHistoryScreen() {
-  const { historyGroups, totalSpent } = useExpenses();
+  const { historyGroups, expenses, totalSpent, loading } = useExpenses();
   const [selectedCategory, setSelectedCategory] =
     useState<HistoryCategoryFilter>("All");
   const [isSearching, setIsSearching] = useState(false);
@@ -25,6 +32,15 @@ export default function ExpenseHistoryScreen() {
       router.replace("/(tabs)/home");
     }
   };
+
+  const currentMonthLabel = useMemo(() => {
+    return new Date()
+      .toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      })
+      .toUpperCase();
+  }, []);
 
   const filteredGroups = useMemo(() => {
     return historyGroups
@@ -95,11 +111,13 @@ export default function ExpenseHistoryScreen() {
             </View>
 
             <View className="items-end">
-              <View className="flex-row items-center gap-1 bg-white/20 px-2.5 py-1 rounded-full">
-                <Text className="text-white text-[13px] font-bold">↑</Text>
-                <Text className="text-white text-[13px] font-bold">8.4%</Text>
+              <View className="flex-row items-center gap-1">
+                <Text className="text-red-400 text-[16px] font-bold">↑</Text>
+                <Text className="text-white text-[18px] font-extrabold">
+                  8.4%
+                </Text>
               </View>
-              <Text className="text-white/80 text-[11px] font-medium mt-1">
+              <Text className="text-white/80 text-[11px] font-medium mt-0.5">
                 vs last month
               </Text>
             </View>
@@ -119,12 +137,12 @@ export default function ExpenseHistoryScreen() {
                   className={`h-[34px] px-4 rounded-full items-center justify-center border ${
                     active
                       ? "bg-[#05bf78] border-[#05bf78]"
-                      : "bg-[#e5e7eb] border-transparent"
+                      : "bg-[#e2e8f0] border-transparent"
                   }`}
                 >
                   <Text
                     className={`text-[13px] font-semibold ${
-                      active ? "text-white" : "text-[#4b5563]"
+                      active ? "text-white" : "text-[#475569]"
                     }`}
                   >
                     {cat}
@@ -137,7 +155,7 @@ export default function ExpenseHistoryScreen() {
           <View>
             <View className="flex-row items-center justify-between mt-1">
               <Text className="text-[14px] font-bold tracking-wider text-[#1f2937] uppercase">
-                September 2026
+                {currentMonthLabel}
               </Text>
               <Pressable
                 hitSlop={8}
@@ -152,7 +170,6 @@ export default function ExpenseHistoryScreen() {
               </Pressable>
             </View>
 
-            {/* Search Input Bar */}
             {isSearching && (
               <View className="flex-row items-center h-[42px] rounded-[12px] bg-white px-3 mt-2.5 border border-[#e1e5ea] shadow-sm shadow-black/5">
                 <Text className="text-[14px] mr-2 text-gray-400">🔍</Text>
@@ -175,10 +192,23 @@ export default function ExpenseHistoryScreen() {
             )}
           </View>
 
-          {filteredGroups.length === 0 ? (
-            <View className="bg-white rounded-[20px] p-8 items-center justify-center">
-              <Text className="text-[14px] font-medium text-gray-400">
+          {loading ? (
+            <View className="py-12 items-center justify-center">
+              <ActivityIndicator size="large" color="#05bf78" />
+              <Text className="text-[13px] text-gray-400 mt-2 font-medium">
+                Loading family expenses...
+              </Text>
+            </View>
+          ) : filteredGroups.length === 0 ? (
+            <View className="bg-white rounded-[20px] p-8 items-center justify-center shadow-sm shadow-black/5">
+              <Text className="text-[24px] mb-1">💸</Text>
+              <Text className="text-[14px] font-semibold text-gray-700">
                 No expenses found
+              </Text>
+              <Text className="text-[12px] text-gray-400 mt-1 text-center">
+                {searchQuery || selectedCategory !== "All"
+                  ? "Try changing your search or category filter"
+                  : "Tap + on the navigation bar to add your first expense"}
               </Text>
             </View>
           ) : (
