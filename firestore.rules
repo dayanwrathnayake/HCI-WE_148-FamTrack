@@ -8,6 +8,11 @@ rules_version = '2';
 // with. Anyone who registers with an invited email address, before the real owner does,
 // will be linked to that family. Requiring `request.auth.token.email_verified == true`
 // in authEmail-based checks would close this, at the cost of a verification step.
+// Mitigation: an invitation can only be claimed for 30 days (see invitationExpired).
+//
+// Other accepted limits (see docs/SECURITY.md): rules cannot loop, so each id in an expense's
+// `splitAmong` is not checked against the members; rules cannot count documents, so the number of
+// members, invitations and expenses per family is not capped.
 //
 // Model:
 //   users/{uid}                              - profile, created once at registration
@@ -68,11 +73,28 @@ service cloud.firestore {
       return getAfter(familyPath(familyId)).data.ownerId == request.auth.uid;
     }
 
-    // Registration with an invitation: a pending invitation for this user's email must
+    // An invitation can be claimed for 30 days after `createdAt` (when the current invitation was
+    // issued; renewing resets it). Invitations made before expiry existed have the same field.
+    function invitationExpired(invitation) {
+      return request.time >= invitation.createdAt + duration.value(30, 'd');
+    }
+
+    // The month of `startDate` is the current month. Time zones are covered by also accepting the
+    // month of the day before and the day after the server time (the same window expenses use).
+    function isCurrentMonthKey(monthKey) {
+      return monthKey in [
+        monthKeyOf(request.time - duration.value(1, 'd')),
+        monthKeyOf(request.time),
+        monthKeyOf(request.time + duration.value(1, 'd'))
+      ];
+    }
+
+    // Registration with an invitation: a pending, unexpired invitation for this user's email must
     // point at that family, and the same batch must activate the matching member for them.
     function joinsInvitedFamily(familyId) {
       let invitation = get(invitationPath(authEmail())).data;
       return invitation.status == 'pending'
+        && !invitationExpired(invitation)
         && invitation.familyId == familyId
         && getAfter(memberPath(familyId, invitation.memberId)).data.userId == request.auth.uid;
     }
@@ -166,11 +188,7 @@ service cloud.firestore {
         && data.date.seconds() == 0
         && data.date.nanos() == 0
         && data.date <= request.time + duration.value(1, 'd')
-        && data.monthKey in [
-          monthKeyOf(request.time - duration.value(1, 'd')),
-          monthKeyOf(request.time),
-          monthKeyOf(request.time + duration.value(1, 'd'))
-        ];
+        && isCurrentMonthKey(data.monthKey);
     }
 
     function validExpenseShape(data) {
@@ -260,9 +278,10 @@ service cloud.firestore {
         allow list: if isMemberOf(familyId);
 
         // Family members can read a single member. A person can also read their own
-        // pending invite so registration can tell whether it is still valid.
+        // pending invite so registration can tell whether it is still valid. A member that does
+        // not exist is NOT readable by outsiders (the rule cannot be evaluated, so it is denied);
+        // registration treats that denial as "no valid invitation".
         allow get: if isMemberOf(familyId)
-          || resource == null
           || (resource.data.status == 'pending' && resource.data.inviteEmail == authEmail());
 
         allow create: if signedIn()
@@ -302,6 +321,7 @@ service cloud.firestore {
           && request.resource.data.joinedAt == request.time
           && get(invitationPath(authEmail())).data.familyId == familyId
           && get(invitationPath(authEmail())).data.memberId == memberId
+          && !invitationExpired(get(invitationPath(authEmail())).data)
           && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
       }
     }
@@ -330,14 +350,27 @@ service cloud.firestore {
         && getAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
              .data.inviteEmail == request.resource.data.email;
 
-      // The invited person accepting. Only `status` may change (pending -> accepted),
-      // so familyId, memberId, email, invitedBy and createdAt are all frozen.
+      // The invited person accepting, while the invitation has not expired. Only `status` may
+      // change (pending -> accepted), so familyId, memberId, email, invitedBy and createdAt are
+      // all frozen.
       allow update: if signedIn()
         && emailId == authEmail()
         && resource.data.status == 'pending'
+        && !invitationExpired(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'accepted'
         && getAfter(userPath(request.auth.uid)).data.familyId == resource.data.familyId;
+
+      // The family owner renewing an EXPIRED invitation for a member who is still pending (the
+      // admin invited the same email again). Only `createdAt` may change, to now, so the same
+      // familyId, memberId, email and status stay. Nothing here can delete or re-point it.
+      allow update: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && resource.data.status == 'pending'
+        && invitationExpired(resource.data)
+        && get(memberPath(resource.data.familyId, resource.data.memberId)).data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['createdAt'])
+        && request.resource.data.createdAt == request.time;
     }
 
     // ---------- budgets ----------
@@ -348,12 +381,14 @@ service cloud.firestore {
       // Any member of the family, including for a month that has no budget yet.
       allow get: if isMemberOf(budgetFamilyId(budgetId));
 
-      // Family owner (admin) only. The id must be <familyId>_<YYYY-MM of startDate>, and startDate
-      // must be the 1st of that month at 00:00:00 UTC.
+      // Family owner (admin) only, and only for the current month. The id must be
+      // <familyId>_<YYYY-MM of startDate>, and startDate must be the 1st of that month at
+      // 00:00:00 UTC.
       allow create: if signedIn()
         && validBudgetShape(request.resource.data)
         && isOwnerOf(request.resource.data.familyId)
         && budgetId == request.resource.data.familyId + '_' + monthKeyOf(request.resource.data.startDate)
+        && isCurrentMonthKey(monthKeyOf(request.resource.data.startDate))
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.startDate.day() == 1
         && request.resource.data.startDate.hours() == 0
@@ -361,10 +396,12 @@ service cloud.firestore {
         && request.resource.data.startDate.seconds() == 0
         && request.resource.data.startDate.nanos() == 0;
 
-      // Family owner (admin) only. familyId, createdBy, period and startDate are frozen. A budget
-      // saved before categories existed gains its `categories` map on its next save.
+      // Family owner (admin) only, and only the current month's budget: past months are history.
+      // familyId, createdBy, period and startDate are frozen. A budget saved before categories
+      // existed gains its `categories` map on its next save.
       allow update: if signedIn()
         && isOwnerOf(resource.data.familyId)
+        && isCurrentMonthKey(monthKeyOf(resource.data.startDate))
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses', 'categories'])
         && validBudgetShape(request.resource.data);

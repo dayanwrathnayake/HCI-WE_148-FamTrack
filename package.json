@@ -24,9 +24,11 @@
     "react-native-worklets": "^0.10.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "firebase-tools": "^15.32.1",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.3"
   },
@@ -35,7 +37,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-famtrack \"node --test --test-concurrency=1 rules-tests/*.test.mjs\""
   },
   "private": true
 }

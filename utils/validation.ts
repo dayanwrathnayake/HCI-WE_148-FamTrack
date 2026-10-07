@@ -1,7 +1,9 @@
 // Each validator returns an error message, or null when the value is acceptable.
 
 export const MAX_NAME_LENGTH = 100;
-export const MIN_PASSWORD_LENGTH = 6;
+// Enforced here only (Firebase Auth itself accepts 6+). Login does not check it, so accounts made
+// with a shorter password before this limit can still sign in.
+export const MIN_PASSWORD_LENGTH = 8;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
