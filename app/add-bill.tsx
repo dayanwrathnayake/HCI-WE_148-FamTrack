@@ -1,6 +1,8 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Switch,
@@ -12,8 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
 import { BillCategory } from "../constants/bills";
-import { ALL_MEMBERS, Member } from "../constants/expense";
 import { useBills } from "../context/BillsContext";
+import { useFamily } from "../context/FamilyContext";
+import type { MemberRecord } from "../utils/members";
 
 type BillCategoryOption = {
   key: BillCategory;
@@ -30,6 +33,7 @@ const BILL_CATEGORY_OPTIONS: BillCategoryOption[] = [
 ];
 
 export default function AddBillScreen() {
+  const { family, activeMembers, currentMember } = useFamily();
   const { addBill } = useBills();
 
   const [billTitle, setBillTitle] = useState("");
@@ -38,7 +42,15 @@ export default function AddBillScreen() {
   const [isAutoPay, setIsAutoPay] = useState(false);
   const [selectedCategory, setSelectedCategory] =
     useState<BillCategoryOption | null>(null);
-  const [assignedMembers, setAssignedMembers] = useState<Member[]>([]);
+  const [selectedAssignedMembers, setSelectedAssignedMembers] = useState<
+    MemberRecord[]
+  >([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  const assignedMembers = useMemo(() => {
+    if (selectedAssignedMembers.length > 0) return selectedAssignedMembers;
+    return currentMember ? [currentMember] : [];
+  }, [selectedAssignedMembers, currentMember]);
 
   const isValid =
     billTitle.trim().length > 0 &&
@@ -67,38 +79,51 @@ export default function AddBillScreen() {
     const digits = text.replace(/[^0-9]/g, "");
     let formatted = "";
     if (digits.length > 0) {
-      let day =
+      const day =
         parseInt(digits.slice(0, 2), 10) > 31 ? "31" : digits.slice(0, 2);
       formatted = day;
       if (digits.length >= 3) {
-        let month =
+        const month =
           parseInt(digits.slice(2, 4), 10) > 12 ? "12" : digits.slice(2, 4);
         formatted = `${day}/${month}`;
-        if (digits.length >= 5)
+        if (digits.length >= 5) {
           formatted = `${day}/${month}/${digits.slice(4, 8)}`;
+        }
       }
     }
     setDueDate(formatted);
   };
 
-  const handleSaveBill = () => {
-    if (!isValid || !selectedCategory) return;
+  const handleSaveBill = async () => {
+    if (!isValid || !selectedCategory || !family) return;
 
-    addBill({
-      title: billTitle.trim(),
-      category: selectedCategory.key,
-      amount: Number(amount.replace(/,/g, "")),
-      dueDateText: dueDate || "End of Month",
-      isAutoPay: isAutoPay,
-      assignedAvatar:
-        assignedMembers.length > 0
-          ? assignedMembers[0].avatar
-          : ALL_MEMBERS[0].avatar,
-      iconEmoji: selectedCategory.emoji,
-      iconBg: selectedCategory.bg,
-    });
+    try {
+      setSubmitting(true);
+      const parsedAmount = Math.max(
+        0,
+        Math.round(Number(amount.replace(/,/g, ""))),
+      );
 
-    handleBack();
+      await addBill({
+        title: billTitle.trim(),
+        category: selectedCategory.key,
+        amount: parsedAmount,
+        dueDate: dueDate.trim() || "End of Month",
+        isAutoPay: isAutoPay,
+        assignedMemberId: assignedMembers[0]?.id || null,
+        iconEmoji: selectedCategory.emoji,
+        iconBg: selectedCategory.bg,
+      });
+
+      handleBack();
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error.message || "Failed to add bill. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -141,11 +166,11 @@ export default function AddBillScreen() {
             Category
           </Text>
           <View className="flex-row flex-wrap gap-2">
-            {BILL_CATEGORY_OPTIONS.map((cat, idx) => {
+            {BILL_CATEGORY_OPTIONS.map((cat) => {
               const active = selectedCategory?.label === cat.label;
               return (
                 <Pressable
-                  key={idx}
+                  key={cat.label}
                   onPress={() => setSelectedCategory(cat)}
                   className={`flex-row items-center gap-1.5 h-[36px] rounded-full px-3 border ${
                     active
@@ -225,9 +250,9 @@ export default function AddBillScreen() {
           <MemberSelector
             label="Assigned Member"
             selectedMembers={assignedMembers}
-            allMembers={ALL_MEMBERS}
-            onAdd={(m) => setAssignedMembers([m])}
-            onRemove={() => setAssignedMembers([])}
+            allMembers={activeMembers}
+            onAdd={(m) => setSelectedAssignedMembers([m])}
+            onRemove={() => setSelectedAssignedMembers([])}
           />
         </View>
 
@@ -235,6 +260,7 @@ export default function AddBillScreen() {
           <Pressable
             className="flex-1 h-[50px] rounded-full items-center justify-center bg-white border border-gray-300 shadow-sm shadow-black/5 elevation-1"
             onPress={handleBack}
+            disabled={submitting}
           >
             <Text className="text-[15px] font-semibold text-gray-700">
               Cancel
@@ -242,20 +268,21 @@ export default function AddBillScreen() {
           </Pressable>
 
           <Pressable
-            className="flex-[1.4] h-[50px] rounded-full items-center justify-center"
+            className="flex-[1.4] h-[50px] rounded-full items-center justify-center flex-row gap-2"
             style={{
-              backgroundColor: isValid ? "#05bf78" : "#a0d9c0",
+              backgroundColor: isValid && !submitting ? "#05bf78" : "#a0d9c0",
               shadowColor: isValid ? "#00c46a" : "transparent",
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: isValid ? 0.3 : 0,
               shadowRadius: 8,
               elevation: isValid ? 4 : 0,
             }}
-            disabled={!isValid}
+            disabled={!isValid || submitting}
             onPress={handleSaveBill}
           >
+            {submitting && <ActivityIndicator color="#ffffff" size="small" />}
             <Text className="text-[15px] font-bold text-white">
-              Add Recurring Bill
+              {submitting ? "Saving..." : "Add Recurring Bill"}
             </Text>
           </Pressable>
         </View>

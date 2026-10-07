@@ -1,62 +1,140 @@
-import React, { createContext, useContext, useState } from "react";
-import { ImageSourcePropType } from "react-native";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useAuth } from "./AuthContext";
+import { useFamily } from "./FamilyContext";
 import {
-  BillCategory,
-  BillItem,
-  MOCK_PAID_BILLS,
-  MOCK_UPCOMING_BILLS,
-} from "../constants/bills";
+  createRecurringBill,
+  CreateRecurringBillInput,
+  RecurringBillDoc,
+  subscribeToFamilyBills,
+  updateBillStatus,
+} from "../services/billsService";
 
-export type NewBillInput = {
-  title: string;
-  category: BillCategory;
-  amount: number;
-  dueDateText: string;
-  isAutoPay: boolean;
-  assignedAvatar?: ImageSourcePropType;
-  iconEmoji: string;
-  iconBg: string;
-};
+export type LiveRecurringBill = RecurringBillDoc & { id: string };
 
 type BillsContextType = {
-  upcomingBills: BillItem[];
-  paidBills: BillItem[];
+  bills: LiveRecurringBill[];
+  upcomingBills: LiveRecurringBill[];
+  paidBills: LiveRecurringBill[];
   totalCommitments: number;
-  addBill: (bill: NewBillInput) => void;
+  loading: boolean;
+  addBill: (
+    input: Omit<CreateRecurringBillInput, "familyId" | "createdBy">,
+  ) => Promise<string>;
+  markAsPaid: (billId: string, paidByText?: string) => Promise<void>;
 };
 
 const BillsContext = createContext<BillsContextType | undefined>(undefined);
 
 export function BillsProvider({ children }: { children: React.ReactNode }) {
-  const [upcomingBills, setUpcomingBills] =
-    useState<BillItem[]>(MOCK_UPCOMING_BILLS);
-  const [paidBills, setPaidBills] = useState<BillItem[]>(MOCK_PAID_BILLS);
+  const { user } = useAuth();
+  const { family } = useFamily();
+  const familyId = family?.id ?? null;
 
-  const totalCommitments =
-    upcomingBills.reduce((sum, b) => sum + b.amount, 0) +
-    paidBills.reduce((sum, b) => sum + b.amount, 0);
+  const [syncedState, setSyncedState] = useState<{
+    familyId: string | null;
+    bills: LiveRecurringBill[];
+  }>({
+    familyId: null,
+    bills: [],
+  });
 
-  const addBill = (input: NewBillInput) => {
-    const newBill: BillItem = {
-      id: `bill_${Date.now()}`,
-      title: input.title,
-      category: input.category,
-      dueText: input.isAutoPay ? "Auto-debit" : "Due in 5 days",
-      dateText: input.dueDateText || "End of Month",
-      amount: input.amount,
-      status: input.isAutoPay ? "AUTO-PAY" : "UNPAID",
-      iconBg: input.iconBg,
-      iconEmoji: input.iconEmoji,
-      assignedAvatar: input.assignedAvatar,
+  useEffect(() => {
+    if (!familyId) return;
+
+    const unsubscribe = subscribeToFamilyBills(
+      familyId,
+      (liveBills) => {
+        setSyncedState({ familyId, bills: liveBills });
+      },
+      () => {
+        setSyncedState({ familyId, bills: [] });
+      },
+    );
+
+    return () => {
+      unsubscribe();
     };
+  }, [familyId]);
 
-    setUpcomingBills((prev) => [newBill, ...prev]);
-  };
+  const bills = useMemo(
+    () =>
+      familyId && syncedState.familyId === familyId ? syncedState.bills : [],
+    [familyId, syncedState],
+  );
+
+  const loading = Boolean(familyId && syncedState.familyId !== familyId);
+
+  const upcomingBills = useMemo(
+    () => bills.filter((b) => b.status !== "PAID"),
+    [bills],
+  );
+
+  const paidBills = useMemo(
+    () => bills.filter((b) => b.status === "PAID"),
+    [bills],
+  );
+
+  const totalCommitments = useMemo(
+    () => bills.reduce((sum, b) => sum + (b.amount || 0), 0),
+    [bills],
+  );
+
+  const addBill = useCallback(
+    async (
+      input: Omit<CreateRecurringBillInput, "familyId" | "createdBy">,
+    ): Promise<string> => {
+      if (!familyId || !user) {
+        throw new Error(
+          "You must be part of a family to create a recurring bill.",
+        );
+      }
+
+      return createRecurringBill({
+        ...input,
+        familyId,
+        createdBy: user.uid,
+      });
+    },
+    [familyId, user],
+  );
+
+  const markAsPaid = useCallback(
+    async (billId: string, paidByText?: string): Promise<void> => {
+      await updateBillStatus(billId, "PAID", paidByText);
+    },
+    [],
+  );
+
+  const contextValue = useMemo(
+    () => ({
+      bills,
+      upcomingBills,
+      paidBills,
+      totalCommitments,
+      loading,
+      addBill,
+      markAsPaid,
+    }),
+    [
+      bills,
+      upcomingBills,
+      paidBills,
+      totalCommitments,
+      loading,
+      addBill,
+      markAsPaid,
+    ],
+  );
 
   return (
-    <BillsContext.Provider
-      value={{ upcomingBills, paidBills, totalCommitments, addBill }}
-    >
+    <BillsContext.Provider value={contextValue}>
       {children}
     </BillsContext.Provider>
   );

@@ -1,25 +1,44 @@
-import { Image, Text, View } from "react-native";
-import { BillItem } from "../constants/bills";
+import { Text, View } from "react-native";
+import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
+import { useFamily } from "../context/FamilyContext";
+import { LiveRecurringBill } from "../context/BillsContext";
+import { getAvatarPalette, getInitials } from "../utils/members";
 
 type Props = {
-  bill: BillItem;
+  bill: LiveRecurringBill;
   isLast?: boolean;
 };
 
 export function BillItemRow({ bill, isLast = false }: Props) {
+  const { members } = useFamily();
+
+  const assignedMember = bill.assignedMemberId
+    ? members.find((m) => m.id === bill.assignedMemberId)
+    : null;
+
+  const assignedInitials = assignedMember
+    ? getInitials(assignedMember.displayName)
+    : "";
+  const assignedPalette = assignedMember
+    ? getAvatarPalette(assignedMember.id)
+    : null;
+
   return (
-    <View key={bill.id}>
-      <View className="flex-row items-center justify-between py-1.5">
+    <View>
+      <View className="flex-row items-center justify-between py-2">
         <View className="flex-row items-center gap-3 flex-1 mr-2">
           <View
             className="w-[42px] h-[42px] rounded-full items-center justify-center"
-            style={{ backgroundColor: bill.iconBg }}
+            style={{ backgroundColor: bill.iconBg || "#e0f2fe" }}
           >
-            <Text className="text-[18px]">{bill.iconEmoji}</Text>
+            <Text className="text-[18px]">{bill.iconEmoji || "📄"}</Text>
           </View>
 
           <View className="flex-1">
-            <Text className="text-[14px] font-bold text-[#111827]">
+            <Text
+              className="text-[14.5px] font-bold text-[#111827]"
+              numberOfLines={1}
+            >
               {bill.title}
             </Text>
 
@@ -29,14 +48,15 @@ export function BillItemRow({ bill, isLast = false }: Props) {
               </Text>
             ) : (
               <View className="flex-row items-center gap-1.5 mt-0.5">
-                <Text className="text-[11px] text-[#64748b]">
-                  {bill.dueText} • {bill.dateText}
+                <Text className="text-[11.5px] text-[#64748b]">
+                  {bill.isAutoPay ? "Auto-debit" : "Due"} • {bill.dueDate}
                 </Text>
-                {bill.assignedAvatar && (
-                  <Image
-                    source={bill.assignedAvatar}
-                    style={{ width: 18, height: 18, borderRadius: 9 }}
-                    resizeMode="cover"
+                {assignedMember && assignedPalette && (
+                  <MemberInitialsAvatar
+                    initials={assignedInitials}
+                    backgroundColor={assignedPalette.background}
+                    textColor={assignedPalette.text}
+                    size={18}
                   />
                 )}
               </View>
@@ -66,14 +86,14 @@ export function BillItemRow({ bill, isLast = false }: Props) {
           )}
 
           {bill.status === "PAID" && (
-            <View className="w-[18px] h-[18px] rounded-full bg-[#05bf78] items-center justify-center">
-              <Text className="text-white text-[10px] font-bold">✓</Text>
+            <View className="w-[20px] h-[20px] rounded-full bg-[#00c46a] items-center justify-center">
+              <Text className="text-white text-[11px] font-bold">✓</Text>
             </View>
           )}
         </View>
       </View>
 
-      {!isLast && <View className="h-[1px] bg-gray-100 my-2" />}
+      {!isLast && <View className="h-[1px] bg-[#f1f5f9] my-1.5" />}
     </View>
   );
 }
