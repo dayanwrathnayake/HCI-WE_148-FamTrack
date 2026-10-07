@@ -1,14 +1,14 @@
 import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "../../components/Icon";
 import { MemberInitialsAvatar } from "../../components/MemberInitialsAvatar";
 import { ProgressBar } from "../../components/ProgressBar";
 import { SharedActivityRow } from "../../components/SharedActivityRow";
-
-const FAMILY_NAME = "Perera family";
-const PERIOD_LABEL = "September 2026";
+import { useFamily } from "../../context/FamilyContext";
+import { getAvatarPalette, getInitials, getMonthYearLabel } from "../../utils/members";
 
 const MONTHLY_BUDGET = 100000;
 const MONTHLY_SPENT = 65000;
@@ -25,38 +25,8 @@ type MemberData = {
   progressColor: string;
 };
 
-const MEMBERS: MemberData[] = [
-  {
-    initials: "DP",
-    avatarColor: "#ffd8a8",
-    avatarTextColor: "#7a4b00",
-    name: "Amali",
-    role: "Admin",
-    spentAmount: "Rs 26,400",
-    progress: 0.72,
-    progressColor: "#00c46a",
-  },
-  {
-    initials: "KP",
-    avatarColor: "#cde3ff",
-    avatarTextColor: "#1b4c88",
-    name: "Nimal",
-    role: "Member",
-    spentAmount: "Rs 17,600",
-    progress: 0.48,
-    progressColor: "#4b8df8",
-  },
-  {
-    initials: "AP",
-    avatarColor: "#ffcfe0",
-    avatarTextColor: "#8c2453",
-    name: "Malith",
-    role: "Member",
-    spentAmount: "Rs 12,500",
-    progress: 0.34,
-    progressColor: "#f2789b",
-  },
-];
+// Members come from the shared family backend (FamilyContext). Spent amounts and progress are
+// placeholders (Rs 0 / empty bar) until the expense phase provides real calculations.
 
 type ActivityData = {
   emoji: string;
@@ -84,6 +54,27 @@ const SHARED_ACTIVITY: ActivityData[] = [
 ];
 
 export default function FamilyBudgetScreen() {
+  const { status: familyStatus, family, members, isAdmin } = useFamily();
+
+  const memberRows = useMemo<(MemberData & { key: string })[]>(
+    () =>
+      members.map((member) => {
+        const palette = getAvatarPalette(member.id);
+        return {
+          key: member.id,
+          initials: getInitials(member.displayName),
+          avatarColor: palette.background,
+          avatarTextColor: palette.text,
+          name: member.displayName,
+          role: member.status === "pending" ? "Pending" : member.role === "admin" ? "Admin" : "Member",
+          spentAmount: "Rs 0",
+          progress: 0,
+          progressColor: palette.progress,
+        };
+      }),
+    [members],
+  );
+
   const handleBack = () => router.back();
   const handleInvite = () => router.push("/shared-expenses");
   const handleAddSharedExpense = () => router.push("/shared-expenses");
@@ -105,7 +96,8 @@ export default function FamilyBudgetScreen() {
           <View style={styles.headerTextGroup}>
             <Text style={styles.headerTitle}>Family Budget</Text>
             <Text style={styles.headerSubtitle}>
-              {FAMILY_NAME} · {PERIOD_LABEL}
+              {family ? `${family.name} · ` : ""}
+              {getMonthYearLabel()}
             </Text>
           </View>
         </View>
@@ -148,14 +140,31 @@ export default function FamilyBudgetScreen() {
         <View style={styles.membersCard}>
           <View style={styles.membersHeaderRow}>
             <Text style={styles.sectionTitle}>Members</Text>
-            <Pressable onPress={handleInvite} style={styles.inviteButton}>
+            <Pressable
+              onPress={handleInvite}
+              disabled={!isAdmin}
+              style={[styles.inviteButton, !isAdmin && styles.inviteButtonDisabled]}
+            >
               <Text style={styles.inviteButtonText}>+ Invite</Text>
             </Pressable>
           </View>
 
+          {familyStatus === "loading" || familyStatus === "idle" ? (
+            <View style={styles.membersStateBox}>
+              <ActivityIndicator color="#8a93a0" />
+            </View>
+          ) : null}
+          {familyStatus === "error" || familyStatus === "missing" ? (
+            <View style={styles.membersStateBox}>
+              <Text style={styles.membersStateText}>
+                Couldn&apos;t load your family members. Please try again later.
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.membersList}>
-            {MEMBERS.map((member) => (
-              <View key={member.name} style={styles.memberRow}>
+            {memberRows.map((member) => (
+              <View key={member.key} style={styles.memberRow}>
                 <MemberInitialsAvatar
                   initials={member.initials}
                   backgroundColor={member.avatarColor}
@@ -255,6 +264,18 @@ export default function FamilyBudgetScreen() {
 }
 
 const styles = StyleSheet.create({
+  membersStateBox: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  membersStateText: {
+    fontSize: 12.5,
+    color: "#8a93a0",
+    textAlign: "center",
+  },
+  inviteButtonDisabled: {
+    opacity: 0.4,
+  },
   screen: {
     flex: 1,
     backgroundColor: "#ffffff",

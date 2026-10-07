@@ -1,0 +1,216 @@
+rules_version = '2';
+
+// FamTrack Firestore rules (Production mode: everything not explicitly allowed is denied).
+// Paste into Firebase console > Firestore Database > Rules, then Publish.
+//
+// KNOWN LIMITATION (accepted for this university project): invitations are matched by
+// email address and Firebase does not verify that a new user owns the email they register
+// with. Anyone who registers with an invited email address, before the real owner does,
+// will be linked to that family. Requiring `request.auth.token.email_verified == true`
+// in authEmail-based checks would close this, at the cost of a verification step.
+//
+// Model:
+//   users/{uid}                              - profile, created once at registration
+//   families/{familyId}                      - ownerId is the family's only admin for now
+//   families/{familyId}/members/{memberId}   - may exist before the person has an account
+//   familyInvitations/{lowercasedEmail}      - one pending invitation per email address
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function familyPath(familyId) {
+      return /databases/$(database)/documents/families/$(familyId);
+    }
+
+    function memberPath(familyId, memberId) {
+      return /databases/$(database)/documents/families/$(familyId)/members/$(memberId);
+    }
+
+    function invitationPath(email) {
+      return /databases/$(database)/documents/familyInvitations/$(email);
+    }
+
+    function isStr(value, minLen, maxLen) {
+      return value is string && value.size() >= minLen && value.size() <= maxLen;
+    }
+
+    // A user belongs to the family named on their own profile.
+    function isMemberOf(familyId) {
+      return signedIn()
+        && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.familyId == familyId;
+    }
+
+    function isOwnerOf(familyId) {
+      return signedIn()
+        && get(familyPath(familyId)).data.ownerId == request.auth.uid;
+    }
+
+    // Registration without an invitation: the new profile must point at a family
+    // that is being created by this same user in the same batch.
+    function startsOwnFamily(familyId) {
+      return getAfter(familyPath(familyId)).data.ownerId == request.auth.uid;
+    }
+
+    // Registration with an invitation: a pending invitation for this user's email must
+    // point at that family, and the same batch must activate the matching member for them.
+    function joinsInvitedFamily(familyId) {
+      let invitation = get(invitationPath(authEmail())).data;
+      return invitation.status == 'pending'
+        && invitation.familyId == familyId
+        && getAfter(memberPath(familyId, invitation.memberId)).data.userId == request.auth.uid;
+    }
+
+    function validMemberShape(data) {
+      return data.keys().hasOnly([
+          'userId', 'displayName', 'relationship', 'role',
+          'status', 'inviteEmail', 'canAddExpenses', 'joinedAt'
+        ])
+        && data.keys().hasAll([
+          'userId', 'displayName', 'relationship', 'role',
+          'status', 'inviteEmail', 'canAddExpenses', 'joinedAt'
+        ])
+        && isStr(data.displayName, 1, 100)
+        && data.relationship in ['Parent', 'Child', 'Other']
+        && data.role in ['admin', 'member']
+        && data.status in ['pending', 'active']
+        && data.canAddExpenses is bool;
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      // Own profile only. No list, update or delete for now.
+      allow get: if signedIn() && request.auth.uid == uid;
+
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'email', 'familyId', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'email', 'familyId', 'createdAt'])
+        && isStr(request.resource.data.name, 1, 100)
+        && request.resource.data.email == authEmail()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.familyId is string
+        && (startsOwnFamily(request.resource.data.familyId)
+            || joinsInvitedFamily(request.resource.data.familyId));
+    }
+
+    // ---------- families ----------
+    match /families/{familyId} {
+      allow get: if isMemberOf(familyId);
+
+      // Only as part of a user's first registration: the batch also creates users/{uid}
+      // pointing at this family.
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'ownerId', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'ownerId', 'createdAt'])
+        && isStr(request.resource.data.name, 1, 100)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && !exists(userPath(request.auth.uid))
+        && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
+
+      // Owner may rename the family. ownerId (and everything else) is immutable.
+      allow update: if isOwnerOf(familyId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && isStr(request.resource.data.name, 1, 100);
+
+      match /members/{memberId} {
+        // A member of this family can list its roster. Nobody else can: not strangers,
+        // and not members of other families (isMemberOf compares the caller's own
+        // profile familyId with this path's familyId).
+        allow list: if isMemberOf(familyId);
+
+        // Family members can read a single member. A person can also read their own
+        // pending invite so registration can tell whether it is still valid.
+        allow get: if isMemberOf(familyId)
+          || resource == null
+          || (resource.data.status == 'pending' && resource.data.inviteEmail == authEmail());
+
+        allow create: if signedIn()
+          && validMemberShape(request.resource.data)
+          && (
+            // (a) The family creator's own admin member, written at registration.
+            (memberId == request.auth.uid
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.role == 'admin'
+              && request.resource.data.status == 'active'
+              && request.resource.data.inviteEmail == null
+              && request.resource.data.canAddExpenses == true
+              && request.resource.data.joinedAt == request.time
+              && !exists(userPath(request.auth.uid))
+              && getAfter(familyPath(familyId)).data.ownerId == request.auth.uid)
+            ||
+            // (b) The owner adds a pending member who has not registered yet.
+            (isOwnerOf(familyId)
+              && request.resource.data.userId == null
+              && request.resource.data.role == 'member'
+              && request.resource.data.status == 'pending'
+              && isStr(request.resource.data.inviteEmail, 3, 254)
+              && request.resource.data.inviteEmail == request.resource.data.inviteEmail.lower()
+              && request.resource.data.joinedAt == null)
+          );
+
+        // The invited person activating their pending member. Only userId, status and
+        // joinedAt may change; role, inviteEmail, displayName etc. are all frozen.
+        allow update: if signedIn()
+          && resource.data.status == 'pending'
+          && resource.data.userId == null
+          && resource.data.inviteEmail == authEmail()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['userId', 'status', 'joinedAt'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.status == 'active'
+          && request.resource.data.joinedAt == request.time
+          && get(invitationPath(authEmail())).data.familyId == familyId
+          && get(invitationPath(authEmail())).data.memberId == memberId
+          && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
+      }
+    }
+
+    // ---------- family invitations ----------
+    match /familyInvitations/{emailId} {
+      // The invited person (by email) and the owner of the inviting family.
+      allow get: if signedIn()
+        && (emailId == authEmail()
+            || (resource != null && isOwnerOf(resource.data.familyId)));
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(
+             ['familyId', 'memberId', 'email', 'invitedBy', 'status', 'createdAt'])
+        && request.resource.data.keys().hasAll(
+             ['familyId', 'memberId', 'email', 'invitedBy', 'status', 'createdAt'])
+        && request.resource.data.familyId is string
+        && isOwnerOf(request.resource.data.familyId)
+        && request.resource.data.email is string
+        && emailId == request.resource.data.email
+        && request.resource.data.email == request.resource.data.email.lower()
+        && request.resource.data.invitedBy == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && existsAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
+        && getAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
+             .data.inviteEmail == request.resource.data.email;
+
+      // The invited person accepting. Only `status` may change (pending -> accepted),
+      // so familyId, memberId, email, invitedBy and createdAt are all frozen.
+      allow update: if signedIn()
+        && emailId == authEmail()
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'accepted'
+        && getAfter(userPath(request.auth.uid)).data.familyId == resource.data.familyId;
+    }
+  }
+}

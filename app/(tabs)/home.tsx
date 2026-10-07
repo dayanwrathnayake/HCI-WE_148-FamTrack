@@ -12,8 +12,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressBar";
+import { useAuth } from "../../context/AuthContext";
 import type { IconName } from "../../constants/icons";
 import { useNotifications } from "../../context/NotificationContext";
+import { getFirstName } from "../../utils/names";
 
 const TOTAL_BALANCE = "Rs 60,000.00";
 const BUDGET_LEFT = "Rs 35,500.00";
@@ -69,6 +71,8 @@ function CategoryPill({ pill }: { pill: CategoryPillData }) {
 export default function HomeScreen() {
   const [balanceHidden, setBalanceHidden] = useState(false);
   const { unreadCount } = useNotifications();
+  const { profile } = useAuth();
+  const firstName = getFirstName(profile?.name);
 
   const handleFamilyBudgetPress = () => router.push("/(tabs)/budget");
   // TODO: Bills & Reminders belongs to another team member's module.
@@ -82,9 +86,15 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.greeting}>
-              Hello <Text style={styles.greetingName}>Kamal</Text> 👋
+          <View style={{ flexShrink: 1 }}>
+            <Text style={styles.greeting} numberOfLines={1}>
+              Hello{" "}
+              {firstName ? (
+                <>
+                  <Text style={styles.greetingName}>{firstName}</Text>{" "}
+                </>
+              ) : null}
+              👋
             </Text>
             <Text style={styles.greetingSubtitle}>
               Ready to track your money..!

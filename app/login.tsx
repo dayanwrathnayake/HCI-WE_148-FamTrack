@@ -16,7 +16,13 @@ import { OrDivider } from "../components/OrDivider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SocialButton } from "../components/SocialButton";
 import { colors } from "../constants/colors";
-import { useAccount } from "../context/AccountContext";
+import {
+  getLoginErrorMessage,
+  loginUser,
+  PASSWORD_RESET_NOTICE,
+  requestPasswordReset,
+} from "../services/loginService";
+import { validateEmail, validateLoginPassword } from "../utils/validation";
 
 const loginIllustration = require("../assets/auth/login-illustration.png");
 
@@ -24,17 +30,64 @@ const HORIZONTAL_PADDING = 33;
 const ILLUSTRATION_ASPECT_RATIO = 257 / 247;
 
 export default function LoginScreen() {
-  const { accountDeleted } = useAccount();
-  const [email, setEmail] = useState("kamalperera@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [message, setMessage] = useState<{ text: string; tone: "error" | "notice" } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const { width: screenWidth } = useWindowDimensions();
   const illustrationWidth = Math.min(257, screenWidth - HORIZONTAL_PADDING * 2 - 40);
   const illustrationHeight = illustrationWidth / ILLUSTRATION_ASPECT_RATIO;
 
-  const handleLogin = () => { if (!accountDeleted) router.replace("/(tabs)/home"); };
+  const handleLogin = async () => {
+    if (submitting || resetting) return;
+
+    const validationError = validateEmail(email) ?? validateLoginPassword(password);
+    if (validationError) {
+      setMessage({ text: validationError, tone: "error" });
+      return;
+    }
+
+    setMessage(null);
+    setSubmitting(true);
+    try {
+      await loginUser(email, password);
+      // No manual navigation: once sign-in AND the profile check have both succeeded, the
+      // route guards in app/_layout.tsx replace this screen with the Home tab.
+    } catch (e) {
+      setMessage({ text: getLoginErrorMessage(e), tone: "error" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSignUp = () => router.push("/register");
-  const handleForgotPassword = () => {};
+
+  const handleForgotPassword = async () => {
+    if (submitting || resetting) return;
+
+    if (email.trim().length === 0) {
+      setMessage({ text: "Enter your email address above first.", tone: "error" });
+      return;
+    }
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setMessage({ text: emailError, tone: "error" });
+      return;
+    }
+
+    setMessage(null);
+    setResetting(true);
+    try {
+      await requestPasswordReset(email);
+      setMessage({ text: PASSWORD_RESET_NOTICE, tone: "notice" });
+    } catch (e) {
+      setMessage({ text: getLoginErrorMessage(e), tone: "error" });
+    } finally {
+      setResetting(false);
+    }
+  };
   const handleGoogleLogin = () => {};
   const handleAppleLogin = () => {};
 
@@ -57,7 +110,6 @@ export default function LoginScreen() {
           </View>
 
           <Text className="mt-6 text-[28px] font-bold text-black">Welcome Back 👋</Text>
-          {accountDeleted && <Text accessibilityLiveRegion="polite" style={{ color: "#078653", fontSize: 14, lineHeight: 21, marginTop: 12 }}>Account deleted successfully. Create a new account to continue.</Text>}
           <Text
             className="mt-3 text-center text-[15px] leading-[22px]"
             style={{ color: "#71717a" }}
@@ -85,8 +137,17 @@ export default function LoginScreen() {
             </View>
           </View>
 
+          {message ? (
+            <Text
+              className="mt-4 text-[12px]"
+              style={{ color: message.tone === "error" ? colors.error : colors.primary }}
+            >
+              {message.text}
+            </Text>
+          ) : null}
+
           <View className="mt-6">
-            <PrimaryButton label="Log In" onPress={handleLogin} />
+            <PrimaryButton label="Log In" onPress={handleLogin} loading={submitting} />
           </View>
 
           <View className="mt-6">

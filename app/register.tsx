@@ -17,7 +17,8 @@ import { OrDivider } from "../components/OrDivider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { SocialButton } from "../components/SocialButton";
 import { colors } from "../constants/colors";
-import { useAccount } from "../context/AccountContext";
+import { getRegistrationErrorMessage, registerUser } from "../services/registrationService";
+import { validateEmail, validateName, validatePassword } from "../utils/validation";
 
 const registerIllustration = require("../assets/auth/register-illustration.png");
 
@@ -25,16 +26,41 @@ const HORIZONTAL_PADDING = 31;
 const ILLUSTRATION_SIZE_RATIO = 221 / 402; // illustration width relative to the Figma reference frame
 
 export default function RegisterScreen() {
-  const { createAccount } = useAccount();
-  const [name, setName] = useState("Kamal Perera");
-  const [email, setEmail] = useState("kamalperera@gmail.com");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const { width: screenWidth } = useWindowDimensions();
   const illustrationSize = screenWidth * ILLUSTRATION_SIZE_RATIO;
 
-  const handleCreateAccount = () => { createAccount(name.trim(), email.trim()); router.replace("/(tabs)/home"); };
+  const handleCreateAccount = async () => {
+    if (submitting) return;
+
+    const validationError =
+      validateName(name) ??
+      validateEmail(email) ??
+      validatePassword(password) ??
+      (agreed ? null : "Please agree to the Terms & Privacy Policy.");
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+    try {
+      await registerUser({ name, email, password });
+      // No manual navigation: once the account AND its Firestore profile both exist, the
+      // route guards in app/_layout.tsx replace this screen with the Home tab.
+    } catch (e) {
+      setError(getRegistrationErrorMessage(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const handleLogIn = () => router.push("/login");
   const handleGoogleSignUp = () => {};
   const handleAppleSignUp = () => {};
@@ -98,8 +124,18 @@ export default function RegisterScreen() {
             </Text>
           </Pressable>
 
+          {error ? (
+            <Text className="mt-3 text-[12px]" style={{ color: colors.error }}>
+              {error}
+            </Text>
+          ) : null}
+
           <View className="mt-6">
-            <PrimaryButton label="Create Account" onPress={handleCreateAccount} />
+            <PrimaryButton
+              label="Create Account"
+              onPress={handleCreateAccount}
+              loading={submitting}
+            />
           </View>
 
           <View className="mt-6">

@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AddFamilyMemberModal } from "../components/AddFamilyMemberModal";
@@ -9,6 +9,14 @@ import { AppBottomNav } from "../components/AppBottomNav";
 import { ExpenseActivityRow } from "../components/ExpenseActivityRow";
 import { Icon } from "../components/Icon";
 import { MemberInitialsAvatar } from "../components/MemberInitialsAvatar";
+import { useFamily } from "../context/FamilyContext";
+import {
+  getAvatarPalette,
+  getInitials,
+  getMemberSubtitle,
+  getMonthYearLabel,
+  getRoleLabel,
+} from "../utils/members";
 
 type Tab = "members" | "expenses";
 
@@ -25,40 +33,8 @@ type MemberData = {
   highlighted?: boolean;
 };
 
-const MEMBERS: MemberData[] = [
-  {
-    key: "Mum",
-    initials: "MU",
-    avatarColor: "#ffcfe0",
-    avatarTextColor: "#8c2453",
-    name: "Mum",
-    subtitle: "Parent · 8 expenses",
-    amount: "Rs 20,000",
-    percent: "43%",
-  },
-  {
-    key: "Dad",
-    initials: "DA",
-    avatarColor: "#cde3ff",
-    avatarTextColor: "#1b4c88",
-    name: "Dad",
-    subtitle: "Parent · 5 expenses",
-    amount: "Rs 12,000",
-    percent: "26%",
-  },
-  {
-    key: "You",
-    initials: "YO",
-    avatarColor: "#ffd8a8",
-    avatarTextColor: "#7a4b00",
-    name: "You",
-    roleSuffix: "Admin",
-    subtitle: "6 expenses",
-    amount: "Rs 15,000",
-    percent: "31%",
-    highlighted: true,
-  },
-];
+// Members come from the shared family backend (FamilyContext). Amounts, percentages and
+// expense counts are placeholders (Rs 0 / 0% / 0 expenses) until the expense phase.
 
 const FILTERS = ["All", "Mum", "Dad", "You"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -138,6 +114,29 @@ export default function SharedExpensesScreen() {
   const [addMemberVisible, setAddMemberVisible] = useState(false);
   const [addExpenseVisible, setAddExpenseVisible] = useState(false);
 
+  const { status: familyStatus, family, members, activeMembers, currentMember, isAdmin } = useFamily();
+
+  const memberRows = useMemo<MemberData[]>(
+    () =>
+      members.map((member) => {
+        const isYou = member.id === currentMember?.id;
+        const palette = getAvatarPalette(member.id);
+        return {
+          key: member.id,
+          initials: getInitials(member.displayName),
+          avatarColor: palette.background,
+          avatarTextColor: palette.text,
+          name: isYou ? "You" : member.displayName,
+          roleSuffix: member.status === "active" && member.role === "admin" ? getRoleLabel(member) : undefined,
+          subtitle: getMemberSubtitle(member, isYou),
+          amount: "Rs 0",
+          percent: "0%",
+          highlighted: isYou,
+        };
+      }),
+    [members, currentMember],
+  );
+
   const handleBack = () => router.back();
   // TODO: build real search once there's a real data source to search over.
   const handleSearchPress = () => {};
@@ -160,7 +159,10 @@ export default function SharedExpensesScreen() {
             </Pressable>
             <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>Shared Expenses</Text>
-              <Text style={styles.headerSubtitle}>Perera family · September 2026</Text>
+              <Text style={styles.headerSubtitle}>
+                {family ? `${family.name} · ` : ""}
+                {getMonthYearLabel()}
+              </Text>
             </View>
             <Pressable onPress={handleSearchPress} style={styles.searchButton}>
               <Text style={styles.searchEmoji}>🔍</Text>
@@ -195,11 +197,11 @@ export default function SharedExpensesScreen() {
               <View style={styles.summaryCard}>
                 <View>
                   <Text style={styles.summaryLabel}>Total contributed</Text>
-                  <Text style={styles.summaryValue}>Rs 47,000</Text>
+                  <Text style={styles.summaryValue}>Rs 0</Text>
                 </View>
                 <View style={styles.summaryRight}>
                   <Text style={styles.summaryLabel}>Members</Text>
-                  <Text style={styles.summaryValue}>3</Text>
+                  <Text style={styles.summaryValue}>{activeMembers.length}</Text>
                 </View>
               </View>
 
@@ -208,8 +210,21 @@ export default function SharedExpensesScreen() {
                 <Text style={styles.sectionSubtitle}>contributed</Text>
               </View>
 
+              {familyStatus === "loading" || familyStatus === "idle" ? (
+                <View style={styles.memberStateBox}>
+                  <ActivityIndicator color="#8a93a0" />
+                </View>
+              ) : null}
+              {familyStatus === "error" || familyStatus === "missing" ? (
+                <View style={styles.memberStateBox}>
+                  <Text style={styles.memberStateText}>
+                    Couldn&apos;t load your family members. Please try again later.
+                  </Text>
+                </View>
+              ) : null}
+
               <View style={styles.memberList}>
-                {MEMBERS.map((member) => (
+                {memberRows.map((member) => (
                   <View
                     key={member.key}
                     style={[styles.memberCard, member.highlighted && styles.memberCardHighlighted]}
@@ -239,7 +254,8 @@ export default function SharedExpensesScreen() {
 
               <Pressable
                 onPress={() => setAddMemberVisible(true)}
-                style={styles.addMemberButton}
+                disabled={!isAdmin}
+                style={[styles.addMemberButton, !isAdmin && styles.addMemberButtonDisabled]}
               >
                 <Text style={styles.addMemberText}>+ Add family member</Text>
               </Pressable>
@@ -312,6 +328,18 @@ export default function SharedExpensesScreen() {
 }
 
 const styles = StyleSheet.create({
+  memberStateBox: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  memberStateText: {
+    fontSize: 12.5,
+    color: "#8a93a0",
+    textAlign: "center",
+  },
+  addMemberButtonDisabled: {
+    opacity: 0.4,
+  },
   root: {
     flex: 1,
     backgroundColor: "#ffffff",
