@@ -9,7 +9,6 @@ import { BudgetProvider } from "../context/BudgetContext";
 import { ExpenseProvider } from "../context/ExpenseContext";
 import { FamilyProvider } from "../context/FamilyContext";
 import { SavingsProvider } from "../context/SavingsContext";
-import { AccountProvider } from "../context/AccountContext";
 import { IncomeProvider } from "../context/IncomeContext";
 import { NotificationProvider } from "../context/NotificationContext";
 
@@ -63,25 +62,30 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <FamilyProvider>
-          <NotificationProvider>
-            <AccountProvider>
-              <IncomeProvider>
-                <BudgetProvider>
-                  <ExpenseProvider>
-                    <SavingsProvider>
-                      <BillsProvider>
-                        <RootNavigator />
-                      </BillsProvider>
-                    </SavingsProvider>
-                  </ExpenseProvider>
-                </BudgetProvider>
-              </IncomeProvider>
-            </AccountProvider>
-          </NotificationProvider>
-        </FamilyProvider>
+        <UserProviders />
       </AuthProvider>
     </SafeAreaProvider>
+  );
+}
+
+function UserProviders() {
+  const { user } = useAuth();
+  return (
+    <FamilyProvider key={user?.uid ?? "signed-out"}>
+      <NotificationProvider>
+        <IncomeProvider>
+          <BudgetProvider>
+            <ExpenseProvider>
+              <SavingsProvider>
+                <BillsProvider>
+                  <RootNavigator />
+                </BillsProvider>
+              </SavingsProvider>
+            </ExpenseProvider>
+          </BudgetProvider>
+        </IncomeProvider>
+      </NotificationProvider>
+    </FamilyProvider>
   );
 }
 

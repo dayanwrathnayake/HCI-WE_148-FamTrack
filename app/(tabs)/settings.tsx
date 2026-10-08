@@ -1,12 +1,12 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 import { Icon } from "../../components/Icon";
-import { INITIAL_GROUP_MEMBERS } from "../../constants/group";
-import { useAccount } from "../../context/AccountContext";
 import { useAuth } from "../../context/AuthContext";
+import { useFamily } from "../../context/FamilyContext";
+import { AccountAvatar } from "../../components/AccountAvatar";
 
 const glyphs = {
   account: '<circle cx="12" cy="8" r="4" fill="#699cab"/><path d="M4 21v-3a8 8 0 0 1 16 0v3" fill="#699cab"/>',
@@ -25,17 +25,28 @@ function ProfileGlyph({ name, size = 19 }: { name: keyof typeof glyphs; size?: n
 type RowProps = { title: string; subtitle: string; icon: keyof typeof glyphs; background: string; onPress: () => void; badge?: string; last?: boolean };
 function ProfileRow({ title, subtitle, icon, background, onPress, badge, last }: RowProps) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => [styles.row, !last && styles.divider, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={!last && styles.divider}>
+      {({ pressed }) => <View style={[styles.row, pressed && styles.pressed]}>
       <View style={[styles.rowIcon, { backgroundColor: background }]}><ProfileGlyph name={icon} /></View>
       <View style={styles.rowText}><Text style={styles.rowTitle}>{title}</Text><Text style={styles.rowSubtitle}>{subtitle}</Text></View>
       {badge ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : <Text style={styles.chevron}>›</Text>}
+      </View>}
     </Pressable>
   );
 }
 export default function ProfileScreen() {
-  const { account, deleteAccount } = useAccount();
-  // Real sign-out (Firebase Auth); the route guard in app/_layout.tsx then returns to Login.
-  const { signOut } = useAuth();
+  const { profile, profileStatus, signOut, retryProfile } = useAuth();
+  const { family, status: familyStatus, currentMember, members, isAdmin, retryFamily } = useFamily();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLogoutError("");
+    setLoggingOut(true);
+    try { await signOut(); }
+    catch { setLogoutError("Could not log out. Please try again."); }
+    finally { setLoggingOut(false); }
+  };
   const [deleteVisible, setDeleteVisible] = useState(false);
   const { accountUpdated } = useLocalSearchParams<{ accountUpdated?: string }>();
   const showSuccess = !!accountUpdated;
@@ -59,19 +70,24 @@ export default function ProfileScreen() {
       </View>
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.profileCard}>
+          {profileStatus === "ready" && profile ? (
           <View style={styles.identity}>
-            <View style={styles.avatarFrame}><Image source={account.avatar} style={styles.avatar} resizeMode="cover" accessibilityLabel={`${account.name} profile photo`} /></View>
+            <AccountAvatar name={profile.name} photoPath={profile.photoPath} />
             <View style={styles.identityText}>
-              <Text style={styles.name}>{account.name}</Text><Text style={styles.email}>{account.email}</Text>
-              <View style={styles.roleBadge}><Text style={styles.roleText}>Family admin · Perera</Text></View>
+              <Text style={styles.name}>{profile.name}</Text><Text style={styles.email}>{profile.email}</Text>
+              {familyStatus === "ready" && family && currentMember?.status === "active" && <View style={styles.roleBadge}><Text style={styles.roleText}>{isAdmin ? "Family admin" : "Family member"} · {family.name}</Text></View>}
+              {familyStatus === "loading" && <Text style={styles.stateText}>Loading family…</Text>}
+              {familyStatus === "ready" && !currentMember && <Text style={styles.stateText}>No active family membership found.</Text>}
+              {(familyStatus === "error" || familyStatus === "missing") && <><Text style={styles.stateText}>{familyStatus === "error" ? "Could not load your family." : "Family information is unavailable."}</Text><Pressable accessibilityRole="button" onPress={retryFamily} style={styles.retry}><Text style={styles.retryText}>Retry family</Text></Pressable></>}
             </View>
           </View>
+          ) : profileStatus === "loading" || profileStatus === "idle" ? <View style={styles.loadingProfile}><ActivityIndicator color="#05bf78" /><Text style={styles.stateText}>Loading your profile…</Text></View> : <View style={styles.loadingProfile}><Text accessibilityLiveRegion="polite" style={styles.stateText}>{profileStatus === "missing" ? "Your account profile could not be found. Please contact your project admin." : "Could not load your profile. Check your connection and try again."}</Text><Pressable accessibilityRole="button" onPress={retryProfile} style={styles.retry}><Text style={styles.retryText}>Retry profile</Text></Pressable></View>}
         </View>
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ACCOUNT</Text>
           <View style={styles.menuCard}>
-            <ProfileRow title="My Account" subtitle="Name, email, password" icon="account" background="#e8f8f2" onPress={() => router.push("/my-account")} />
-            <ProfileRow title="Manage Group" subtitle="Members, roles, invites" icon="group" background="#f0efff" badge={String(INITIAL_GROUP_MEMBERS.length + 1)} onPress={() => router.push("/manage-group")} />
+            <ProfileRow title="My Account" subtitle="Name, email, phone, photo" icon="account" background="#e8f8f2" onPress={() => router.push("/my-account")} />
+            <ProfileRow title="Manage Group" subtitle="Members, roles, invites" icon="group" background="#f0efff" badge={familyStatus === "ready" ? String(members.length) : undefined} onPress={() => router.push("/manage-group")} />
             <ProfileRow title="Reports" subtitle="Monthly spending summary" icon="report" background="#fff1e7" last onPress={() => router.push("/reports")} />
           </View>
         </View>
@@ -88,13 +104,13 @@ export default function ProfileScreen() {
             <ProfileRow title="Delete Account" subtitle="Remove your account" icon="trash" background="#fff0f0" last onPress={() => setDeleteVisible(true)} />
           </View>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => { signOut().catch(() => {}); }} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>Log out</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={loggingOut} accessibilityState={{ disabled: loggingOut, busy: loggingOut }} onPress={handleLogout} style={styles.logout}><Text style={styles.logoutText}>{loggingOut ? "Logging out…" : "Log out"}</Text></Pressable>
+        {!!logoutError && <Text accessibilityLiveRegion="polite" style={styles.logoutError}>{logoutError}</Text>}
       </ScrollView>
       <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => setDeleteVisible(false)}>
         <View style={styles.deleteOverlay}><View style={styles.deleteDialog} accessibilityViewIsModal>
           <Text style={styles.deleteTitle}>Delete your account?</Text>
-          <Text style={styles.deleteDescription}>This will clear your profile and sign you out. You’ll need to create a new account to continue. This prototype stores accounts for the current session only.</Text>
-          <Pressable accessibilityRole="button" onPress={() => { setDeleteVisible(false); deleteAccount(); router.replace({ pathname: "/login", params: { accountDeleted: "1" } }); }} style={styles.confirmDelete}><Text style={styles.confirmDeleteText}>Delete account</Text></Pressable>
+          <Text style={styles.deleteDescription}>Account deletion is not connected to Firebase yet. Your account and family data will remain unchanged.</Text>
           <Pressable accessibilityRole="button" onPress={() => setDeleteVisible(false)} style={styles.deleteButton}><Text style={styles.cancelDelete}>Keep my account</Text></Pressable>
         </View></View>
       </Modal>
@@ -110,6 +126,7 @@ export default function ProfileScreen() {
   );
 }
 const styles = StyleSheet.create({
+  avatarInitials: { fontSize: 26, fontWeight: "700", color: "#078653" }, loadingProfile: { minHeight: 78, alignItems: "center", justifyContent: "center", gap: 8 }, stateText: { fontSize: 12, lineHeight: 18, color: "#667085", marginTop: 5 }, retry: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start", paddingHorizontal: 8 }, retryText: { fontSize: 13, fontWeight: "600", color: "#078653" }, logoutError: { color: "#dc2626", fontSize: 12, textAlign: "center", marginTop: 10 },
   deleteButton: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: 8 }, deleteText: { fontSize: 14, fontWeight: "600", color: "#dc2626" }, deleteOverlay: { flex: 1, backgroundColor: "rgba(16,24,42,0.4)", alignItems: "center", justifyContent: "center", padding: 24 }, deleteDialog: { width: "100%", maxWidth: 380, padding: 24, borderRadius: 24, backgroundColor: "white" }, deleteTitle: { fontSize: 21, fontWeight: "700", color: "#17202e" }, deleteDescription: { fontSize: 14, lineHeight: 22, color: "#627087", marginTop: 12, marginBottom: 20 }, confirmDelete: { minHeight: 48, borderRadius: 14, backgroundColor: "#dc2626", alignItems: "center", justifyContent: "center" }, confirmDeleteText: { fontSize: 14, fontWeight: "700", color: "white" }, cancelDelete: { fontSize: 14, fontWeight: "600", color: "#17202e" },
   successWrap: { position: "absolute", bottom: 20, left: 16, right: 16, alignItems: "center" },
   successBubble: { flexDirection: "row", alignItems: "center", gap: 9, backgroundColor: "#e8faf1", borderColor: "#b6ebce", borderWidth: 1, borderRadius: 26, paddingHorizontal: 18, paddingVertical: 14, shadowColor: "#075c38", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
@@ -122,7 +139,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingBottom: 28, width: "100%", maxWidth: 600, alignSelf: "center" },
   profileCard: { backgroundColor: "#f6f6f6", borderRadius: 25, padding: 18 },
   identity: { flexDirection: "row", alignItems: "center", gap: 11 },
-  avatarFrame: { width: 78, height: 78, borderWidth: 1.5, borderColor: "#00ce69", borderRadius: 29, overflow: "hidden", backgroundColor: "white" },
+  avatarFrame: { width: 78, height: 78, borderWidth: 1.5, borderColor: "#00ce69", borderRadius: 29, overflow: "hidden", backgroundColor: "#e8f8f2", alignItems: "center", justifyContent: "center" },
   avatar: { width: "100%", height: "100%" },
   identityText: { flex: 1, minWidth: 0 },
   name: { fontSize: 20, fontWeight: "800", color: "#080808" },
@@ -134,8 +151,8 @@ const styles = StyleSheet.create({
   menuCard: { borderRadius: 21, backgroundColor: "white", borderWidth: 1, borderColor: "#e4e4e4", paddingHorizontal: 13, paddingVertical: 3, shadowColor: "#000000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 3 },
   row: { flexDirection: "row", alignItems: "center", minHeight: 59, paddingVertical: 11, gap: 12 },
   divider: { borderBottomWidth: 0.7, borderBottomColor: "#f1f2f4" },
-  rowIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  rowText: { flex: 1 },
+  rowIcon: { width: 34, height: 34, flexShrink: 0, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  rowText: { flex: 1, minWidth: 0 },
   rowTitle: { fontSize: 13, fontWeight: "600", color: "#10131b" },
   rowSubtitle: { fontSize: 10, color: "#8b96a6", marginTop: 2 },
   chevron: { color: "#c4cbd5", fontSize: 16, paddingRight: 2 },

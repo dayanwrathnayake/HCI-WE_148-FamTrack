@@ -1,10 +1,7 @@
-import { Redirect, Tabs, router } from "expo-router";
+import { Tabs, router } from "expo-router";
 import { BottomNavBar } from "../../components/BottomNavBar";
-import { useAccount } from "../../context/AccountContext";
 
 export default function TabsLayout() {
-  const { accountDeleted } = useAccount();
-  if (accountDeleted) return <Redirect href="/login" />;
   return (
     <Tabs
       screenOptions={{ headerShown: false }}

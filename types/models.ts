@@ -29,6 +29,8 @@ export type UserProfile = {
   email: string; // stored lowercased
   familyId: string | null;
   createdAt: Timestamp;
+  phone?: string;
+  photoPath?: string;
 };
 
 /** families/{familyId} */

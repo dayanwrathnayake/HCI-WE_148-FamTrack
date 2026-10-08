@@ -29,17 +29,17 @@ export function AddTransactionSheet({ visible, onClose, onIncome, onExpense }: P
           <SafeAreaView edges={["bottom"]}>
             <View style={styles.handle} />
             <View style={styles.actions}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Add Income" onPress={() => close(onIncome)} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-                <View style={[styles.card, styles.income]}>
-                  <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 20V4m-7 7 7-7 7 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
-                  <Text style={styles.actionText}>Add Income</Text><Text style={styles.subtitle}>Salary, gifts, etc.</Text>
-                </View>
-              </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Add Expense" onPress={() => close(onExpense)} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-                <View style={[styles.card, styles.expense]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Add Income" onPress={() => close(onIncome)} style={styles.action}>
+                {({ pressed }) => <View style={[styles.card, styles.income, pressed && styles.pressed]}>
                   <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m-7-7 7 7 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
+                  <Text style={styles.actionText}>Add Income</Text><Text style={styles.subtitle}>Salary, gifts, etc.</Text>
+                </View>}
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Add Expense" onPress={() => close(onExpense)} style={styles.action}>
+                {({ pressed }) => <View style={[styles.card, styles.expense, pressed && styles.pressed]}>
+                  <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 20V4m-7 7 7-7 7 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
                   <Text style={styles.actionText}>Add Expense</Text><Text style={styles.subtitle}>Bills, shopping, etc.</Text>
-                </View>
+                </View>}
               </Pressable>
             </View>
           </SafeAreaView>
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20, width: "100%", maxWidth: 460, alignSelf: "center" },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.dotInactive, alignSelf: "center", marginBottom: 18 },
   actions: { flexDirection: "row-reverse", gap: 12 },
-  action: { flex: 1, borderRadius: 20, overflow: "hidden" },
+  action: { flex: 1, minWidth: 0, borderRadius: 20, overflow: "hidden" },
   card: { minHeight: 148, borderRadius: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, paddingVertical: 18 },
   income: { backgroundColor: "#1dcd9f" },
   expense: { backgroundColor: "#ef4444" },

@@ -58,6 +58,7 @@ type FamilyContextValue = {
   isAdmin: boolean;
   /** Creates a pending member + invitation atomically. Throws InviteError. */
   inviteMember: (input: InviteMemberInput) => Promise<{ memberId: string }>;
+  retryFamily: () => void;
   removeMember: (memberId: string, email?: string | null) => Promise<void>;
 };
 
@@ -89,6 +90,8 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   const key = uid && familyId ? `${uid}:${familyId}` : null;
 
   const [loaded, setLoaded] = useState<Loaded>(EMPTY);
+  const [familyAttempt, setFamilyAttempt] = useState(0);
+  const retryFamily = useCallback(() => setFamilyAttempt(attempt => attempt + 1), []);
 
   useEffect(() => {
     if (!key || !familyId) {
@@ -97,34 +100,36 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
 
     const unsubscribeFamily = subscribeToFamily(familyId, (event) => {
       setLoaded((prev) => {
+        const base = prev.key === key ? prev : EMPTY;
         if (event.status === "ready")
-          return { ...prev, key, family: event.family, familyState: "ready" };
+          return { ...base, key, family: event.family, familyState: "ready" };
         if (event.status === "missing")
-          return { ...prev, key, family: null, familyState: "missing" };
+          return { ...base, key, family: null, familyState: "missing" };
         console.warn("[family] family listener failed", event.error);
-        return { ...prev, key, family: null, familyState: "error" };
+        return { ...base, key, family: null, familyState: "error" };
       });
     });
 
     const unsubscribeMembers = subscribeToMembers(familyId, (event) => {
       setLoaded((prev) => {
+        const base = prev.key === key ? prev : EMPTY;
         if (event.status === "ready") {
           return {
-            ...prev,
+            ...base,
             key,
             members: sortMembers(event.members),
             membersState: "ready",
           };
         }
         console.warn("[family] members listener failed", event.error);
-        return { ...prev, key, members: [], membersState: "error" };
+        return { ...base, key, members: [], membersState: "error" };
       });
     });
     return () => {
       unsubscribeFamily();
       unsubscribeMembers();
     };
-  }, [key, familyId]);
+  }, [key, familyId, familyAttempt]);
 
   // Only data that belongs to the CURRENT user+family is exposed, so a previous account's
   // family can never appear, not even for one render while switching accounts.
@@ -203,19 +208,10 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       currentMember,
       isAdmin,
       inviteMember,
+      retryFamily,
       removeMember,
     }),
-    [
-      status,
-      current.family,
-      members,
-      activeMembers,
-      pendingMembers,
-      currentMember,
-      isAdmin,
-      inviteMember,
-      removeMember,
-    ],
+    [status, current.family, members, activeMembers, pendingMembers, currentMember, isAdmin, inviteMember, retryFamily, removeMember],
   );
 
   return (

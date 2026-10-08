@@ -1,10 +1,11 @@
 import { withAuthFlow } from "../lib/authFlow";
 import { getAuthErrorMessage, sendPasswordReset, signInWithEmail, signOutUser } from "./authService";
 import { getUserProfile } from "./userService";
+import { syncAccountEmail } from "./accountService";
 
-// Login is read-only with respect to Firestore: it checks that users/{uid} exists but
-// NEVER creates a profile, family or member. An Auth account without a profile is
-// signed out again and reported, not repaired.
+// Login checks that users/{uid} exists and synchronizes a stale email through the
+// trusted function. It never creates profiles, families, or members. An Auth account
+// without a profile is signed out and reported, not repaired.
 
 export const PASSWORD_RESET_NOTICE = "If an account exists for that email, we've sent a reset link.";
 
@@ -66,6 +67,10 @@ export function loginUser(email: string, password: string): Promise<LoginResult>
       throw new LoginError("profile-missing");
     }
 
+    if (user.email?.toLowerCase() !== profile.email.toLowerCase()) {
+      try { await syncAccountEmail(); }
+      catch { await signOutQuietly(); throw new LoginError("profile-unavailable"); }
+    }
     return { uid: user.uid, familyId: profile.familyId };
   });
 }

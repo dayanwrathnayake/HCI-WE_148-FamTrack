@@ -39,7 +39,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-famtrack \"node --test --test-concurrency=1 rules-tests/*.test.mjs\""
+    "emulators": "npx --yes firebase-tools@15.33.0 emulators:start --project demo-famtrack --only auth,firestore,storage,functions",
+    "test:firebase": "npx --yes firebase-tools@15.33.0 emulators:exec --project demo-famtrack --only auth,firestore,storage,functions \"node --test --test-concurrency=1 tests/firebase/auth-flow.test.mjs tests/firebase/auth-rules.test.mjs tests/firebase/income.test.mjs\"",
+    "test:rules": "node scripts/run-rules-tests.cjs"
   },
   "private": true
 }
