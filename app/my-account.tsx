@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
-import { AppBottomNav } from "../components/AppBottomNav";
 import { Icon } from "../components/Icon";
 import { useAccount } from "../context/AccountContext";
 

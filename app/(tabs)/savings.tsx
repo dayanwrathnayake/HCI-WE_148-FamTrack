@@ -1,18 +1,30 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useMemo } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "../../components/Icon";
 import { SavingGoalCard } from "../../components/SavingGoalCard";
-import {
-  MOCK_SAVING_GOALS,
-  MOCK_SAVINGS_SUMMARY,
-  SavingGoal,
-} from "../../constants/savings";
 import { useSavings } from "../../context/SavingsContext";
 
 export default function SavingsGoalsScreen() {
-  const { goals, totalSavings } = useSavings();
+  const { goals, totalSavings, loading } = useSavings();
+
+  const totalTarget = useMemo(
+    () => goals.reduce((sum, g) => sum + (g.targetAmount || 0), 0),
+    [goals],
+  );
+
+  const overallProgress = useMemo(() => {
+    if (totalTarget === 0) return 0;
+    return Math.min(100, Math.round((totalSavings / totalTarget) * 100));
+  }, [totalSavings, totalTarget]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -50,13 +62,13 @@ export default function SavingsGoalsScreen() {
           hitSlop={8}
           className="h-[38px] w-[38px] items-center justify-center rounded-full active:bg-gray-100"
         >
-          <Icon name="notification" size={24} />
+          <Icon name="notification" size={22} />
         </Pressable>
       </View>
 
       <ScrollView
         className="flex-1 bg-[#f8fafc]"
-        contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 18 }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 60, gap: 18 }}
         showsVerticalScrollIndicator={false}
       >
         <View
@@ -74,12 +86,14 @@ export default function SavingsGoalsScreen() {
             Total Family Savings
           </Text>
           <Text className="text-[28px] font-extrabold text-white mt-1">
-            Rs {MOCK_SAVINGS_SUMMARY.totalSavings.toLocaleString("en-US")}
+            Rs {totalSavings.toLocaleString("en-US")}
           </Text>
 
           <View className="self-start mt-2 bg-white/20 px-3 py-1 rounded-full">
             <Text className="text-white text-[12px] font-bold">
-              {MOCK_SAVINGS_SUMMARY.monthlyGrowthPercent} this month
+              {goals.length > 0
+                ? `🎯 ${overallProgress}% of target reached`
+                : "🎯 Start your first goal"}
             </Text>
           </View>
         </View>
@@ -101,11 +115,32 @@ export default function SavingsGoalsScreen() {
           </Text>
         </Pressable>
 
-        <View className="gap-3.5 mt-1">
-          {goals.map((goal) => (
-            <SavingGoalCard key={goal.id} goal={goal} />
-          ))}
-        </View>
+        {loading ? (
+          <View className="py-12 items-center justify-center">
+            <ActivityIndicator size="large" color="#05bf78" />
+            <Text className="text-[13px] text-gray-400 mt-2 font-medium">
+              Loading saving goals...
+            </Text>
+          </View>
+        ) : goals.length === 0 ? (
+          <View className="bg-white rounded-[22px] p-8 items-center justify-center shadow-sm shadow-black/5">
+            <Text className="text-[28px] mb-1.5">🎯</Text>
+            <Text className="text-[15px] font-bold text-gray-700">
+              No saving goals yet
+            </Text>
+            <Text className="text-[12.5px] text-gray-400 mt-1 text-center">
+              {
+                'Tap "+ Create New Goal" above to start saving together with your family!'
+              }
+            </Text>
+          </View>
+        ) : (
+          <View className="gap-3.5 mt-1">
+            {goals.map((goal) => (
+              <SavingGoalCard key={goal.id} goal={goal} />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

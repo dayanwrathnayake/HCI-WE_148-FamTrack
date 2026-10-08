@@ -1,5 +1,5 @@
-import { View, Text } from "react-native";
-import { HistoryItem, ExpenseStatus } from "../constants/history";
+import { Pressable, Text, View } from "react-native";
+import { ExpenseStatus, HistoryItem } from "../constants/history";
 
 const BADGE_STYLES: Record<
   ExpenseStatus,
@@ -20,15 +20,20 @@ const BADGE_STYLES: Record<
 export function HistoryItemRow({
   item,
   isLast,
+  onPress,
 }: {
   item: HistoryItem;
   isLast: boolean;
+  onPress?: (item: HistoryItem) => void;
 }) {
   const badge = BADGE_STYLES[item.status] || BADGE_STYLES.Shared;
 
   return (
     <View key={item.id}>
-      <View className="flex-row items-center justify-between py-1">
+      <Pressable
+        onPress={() => onPress?.(item)}
+        className="flex-row items-center justify-between py-1 active:opacity-75"
+      >
         <View className="flex-row items-center gap-3 flex-1">
           <View
             className="w-[42px] h-[42px] rounded-full items-center justify-center"
@@ -68,7 +73,7 @@ export function HistoryItemRow({
             </Text>
           </View>
         </View>
-      </View>
+      </Pressable>
 
       {!isLast && <View className="h-[1px] bg-gray-100 my-2" />}
     </View>

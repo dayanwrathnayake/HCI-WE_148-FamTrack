@@ -1,11 +1,22 @@
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppBottomNav } from "../components/AppBottomNav";
-import { Icon } from "../components/Icon";
+import { ExpenseDetailModal } from "../components/ExpenseDetailModal";
 import { HistoryItemRow } from "../components/HistoryItemRow";
-import { EXPENSE_CATEGORIES, getExpenseCategory } from "../constants/categories";
+import { Icon } from "../components/Icon";
+import {
+  EXPENSE_CATEGORIES,
+  getExpenseCategory,
+} from "../constants/categories";
 import type { HistoryItem } from "../constants/history";
 import { useExpenses } from "../context/ExpenseContext";
 import { useFamily } from "../context/FamilyContext";
@@ -19,28 +30,39 @@ import { getMonthYearLabel } from "../utils/members";
 
 const ALL_CATEGORIES = "all";
 
-// "All", then every canonical category (Rent, Utilities and Housing no longer exist).
-const CATEGORY_CHIPS: { id: ExpenseCategoryId | typeof ALL_CATEGORIES; label: string }[] = [
+const CATEGORY_CHIPS: {
+  id: ExpenseCategoryId | typeof ALL_CATEGORIES;
+  label: string;
+}[] = [
   { id: ALL_CATEGORIES, label: "All" },
-  ...EXPENSE_CATEGORIES.map((category) => ({ id: category.id, label: category.label })),
+  ...EXPENSE_CATEGORIES.map((category) => ({
+    id: category.id,
+    label: category.label,
+  })),
 ];
 
 export default function ExpenseHistoryScreen() {
-  const { expenses, totals, loadPreviousMonthSpent } = useExpenses();
+  const { expenses, totals, loading, deleteExpense, loadPreviousMonthSpent } =
+    useExpenses();
   const { members, currentMember } = useFamily();
-  const [selectedCategory, setSelectedCategory] = useState<ExpenseCategoryId | typeof ALL_CATEGORIES>(
-    ALL_CATEGORIES,
-  );
+
+  const [selectedCategory, setSelectedCategory] = useState<
+    ExpenseCategoryId | typeof ALL_CATEGORIES
+  >(ALL_CATEGORIES);
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedExpense, setSelectedExpense] = useState<HistoryItem | null>(
+    null,
+  );
 
-  // Last month's SHARED spending, for the "vs last month" badge. null until (or unless) it is known.
   const [previousSpent, setPreviousSpent] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void loadPreviousMonthSpent().then((value) => {
-      if (!cancelled) setPreviousSpent(value);
-    });
+    if (loadPreviousMonthSpent) {
+      void loadPreviousMonthSpent().then((value) => {
+        if (!cancelled) setPreviousSpent(value);
+      });
+    }
     return () => {
       cancelled = true;
     };
@@ -57,44 +79,52 @@ export default function ExpenseHistoryScreen() {
   const payerName = (expense: ExpenseRecord) => {
     const member = members.find((m) => m.id === expense.paidBy);
     if (!member) return "Paid by someone";
-    return member.id === currentMember?.id ? "Paid by you" : `Paid by ${member.displayName}`;
+    return member.id === currentMember?.id
+      ? "Paid by you"
+      : `Paid by ${member.displayName}`;
   };
 
   const toHistoryItem = (expense: ExpenseRecord): HistoryItem => {
     const category = getExpenseCategory(expense.categoryId);
     return {
       id: expense.id,
-      title: expense.note.trim() !== "" ? expense.note.trim() : expense.title,
-      category: category.label,
+      title: expense.note?.trim() ? expense.note.trim() : expense.title,
+      category: category.label as any,
       time: getExpenseTime(expense),
       payerText: payerName(expense),
       amount: expense.amount,
       status: expense.status,
       iconBg: category.iconBackground,
       iconEmoji: category.emoji,
+      receiptUri: (expense as any).receiptUri || null,
+      note: expense.note || null,
     };
   };
 
   const filteredGroups = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const matching = expenses.filter((expense) => {
-      const matchesCategory = selectedCategory === ALL_CATEGORIES || expense.categoryId === selectedCategory;
+      const matchesCategory =
+        selectedCategory === ALL_CATEGORIES ||
+        expense.categoryId === selectedCategory;
       if (!matchesCategory) return false;
       if (query === "") return true;
-      const payer = members.find((m) => m.id === expense.paidBy)?.displayName ?? "";
+      const payer =
+        members.find((m) => m.id === expense.paidBy)?.displayName ?? "";
       return (
         expense.title.toLowerCase().includes(query) ||
-        expense.note.toLowerCase().includes(query) ||
+        (expense.note && expense.note.toLowerCase().includes(query)) ||
         payer.toLowerCase().includes(query) ||
-        getExpenseCategory(expense.categoryId).label.toLowerCase().includes(query)
+        getExpenseCategory(expense.categoryId)
+          .label.toLowerCase()
+          .includes(query)
       );
     });
     return groupExpensesByDay(matching);
   }, [selectedCategory, searchQuery, expenses, members]);
 
-  // Hidden when last month has no shared spending to compare with.
   const changePercent =
-    previousSpent !== null && previousSpent > 0
+    previousSpent !== null && previousSpent > 0 && totals
       ? ((totals.spent - previousSpent) / previousSpent) * 100
       : null;
 
@@ -138,11 +168,13 @@ export default function ExpenseHistoryScreen() {
                 Total Spent
               </Text>
               <Text className="text-[26px] font-extrabold text-white mt-0.5">
-                Rs {totals.spent.toLocaleString("en-US")}
+                Rs {totals?.spent ? totals.spent.toLocaleString("en-US") : "0"}
               </Text>
               <Text className="text-[12px] font-medium text-white/80 mt-0.5">
                 This Month
-                {totals.pendingCount > 0 ? ` · ${totals.pendingCount} pending approval` : ""}
+                {totals?.pendingCount > 0
+                  ? ` · ${totals.pendingCount} pending approval`
+                  : ""}
               </Text>
             </View>
 
@@ -177,12 +209,12 @@ export default function ExpenseHistoryScreen() {
                   className={`h-[34px] px-4 rounded-full items-center justify-center border ${
                     active
                       ? "bg-[#05bf78] border-[#05bf78]"
-                      : "bg-[#e5e7eb] border-transparent"
+                      : "bg-[#e2e8f0] border-transparent"
                   }`}
                 >
                   <Text
                     className={`text-[13px] font-semibold ${
-                      active ? "text-white" : "text-[#4b5563]"
+                      active ? "text-white" : "text-[#475569]"
                     }`}
                   >
                     {cat.label}
@@ -210,7 +242,6 @@ export default function ExpenseHistoryScreen() {
               </Pressable>
             </View>
 
-            {/* Search Input Bar */}
             {isSearching && (
               <View className="flex-row items-center h-[42px] rounded-[12px] bg-white px-3 mt-2.5 border border-[#e1e5ea] shadow-sm shadow-black/5">
                 <Text className="text-[14px] mr-2 text-gray-400">🔍</Text>
@@ -233,10 +264,23 @@ export default function ExpenseHistoryScreen() {
             )}
           </View>
 
-          {filteredGroups.length === 0 ? (
-            <View className="bg-white rounded-[20px] p-8 items-center justify-center">
-              <Text className="text-[14px] font-medium text-gray-400">
+          {loading ? (
+            <View className="py-12 items-center justify-center">
+              <ActivityIndicator size="large" color="#05bf78" />
+              <Text className="text-[13px] text-gray-400 mt-2 font-medium">
+                Loading family expenses...
+              </Text>
+            </View>
+          ) : filteredGroups.length === 0 ? (
+            <View className="bg-white rounded-[20px] p-8 items-center justify-center shadow-sm shadow-black/5">
+              <Text className="text-[28px] mb-1">💸</Text>
+              <Text className="text-[14px] font-semibold text-gray-700">
                 No expenses found
+              </Text>
+              <Text className="text-[12px] text-gray-400 mt-1 text-center">
+                {searchQuery || selectedCategory !== ALL_CATEGORIES
+                  ? "Try changing your search or category filter"
+                  : "Tap + on the navigation bar to add your first expense"}
               </Text>
             </View>
           ) : (
@@ -250,13 +294,17 @@ export default function ExpenseHistoryScreen() {
                 </Text>
 
                 <View className="gap-3">
-                  {group.expenses.map((expense, index) => (
-                    <HistoryItemRow
-                      key={expense.id}
-                      item={toHistoryItem(expense)}
-                      isLast={index === group.expenses.length - 1}
-                    />
-                  ))}
+                  {group.expenses.map((expense, index) => {
+                    const historyItem = toHistoryItem(expense);
+                    return (
+                      <HistoryItemRow
+                        key={expense.id}
+                        item={historyItem}
+                        isLast={index === group.expenses.length - 1}
+                        onPress={(selected) => setSelectedExpense(selected)}
+                      />
+                    );
+                  })}
                 </View>
               </View>
             ))
@@ -265,6 +313,18 @@ export default function ExpenseHistoryScreen() {
       </SafeAreaView>
 
       <AppBottomNav activeRouteName="home" />
+
+      <ExpenseDetailModal
+        visible={selectedExpense !== null}
+        item={selectedExpense}
+        onClose={() => setSelectedExpense(null)}
+        onDelete={async (item) => {
+          if (deleteExpense) {
+            await deleteExpense(item.id);
+          }
+        }}
+      />
+
     </View>
   );
 }

@@ -2,7 +2,10 @@ import { router } from "expo-router";
 
 import { BottomNavBar } from "./BottomNavBar";
 
-const ROUTE_PATHS: Record<string, "/(tabs)/home" | "/(tabs)/budget" | "/(tabs)/savings" | "/(tabs)/settings"> = {
+const ROUTE_PATHS: Record<
+  string,
+  "/(tabs)/home" | "/(tabs)/budget" | "/(tabs)/savings" | "/(tabs)/settings"
+> = {
   home: "/(tabs)/home",
   budget: "/(tabs)/budget",
   savings: "/(tabs)/savings",
@@ -19,11 +22,12 @@ export function AppBottomNav({ activeRouteName }: AppBottomNavProps) {
   return (
     <BottomNavBar
       activeRouteName={activeRouteName}
-      onAddPress={() => router.push("/add-expense")}
       onNavigate={(routeName) => {
         const path = ROUTE_PATHS[routeName];
         if (path) router.replace(path);
       }}
+      onAddPress={() => router.push("/add-expense")}
     />
   );
 }
+

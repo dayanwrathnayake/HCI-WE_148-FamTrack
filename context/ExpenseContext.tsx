@@ -1,4 +1,4 @@
-import {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -7,14 +7,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
-
+import { useAuth } from "./AuthContext";
+import { useBudget } from "./BudgetContext";
+import { useFamily } from "./FamilyContext";
+import { getExpenseCategory } from "../constants/categories";
+import type { HistoryItem } from "../constants/history";
 import {
   addExpense as addExpenseDocument,
   approveExpense as approveExpenseDocument,
+  deleteExpense as deleteExpenseService,
   getMonthSpent,
   subscribeToExpenses,
 } from "../services/expenseService";
-import type { ExpenseCategoryId, ExpenseStatus } from "../types/models";
+import type { ExpenseCategoryId } from "../types/models";
 import { getPreviousMonthKey } from "../utils/budget";
 import {
   computeTotals,
@@ -23,112 +28,183 @@ import {
   type ExpenseRecord,
   type ExpenseTotals,
 } from "../utils/expenses";
-import { useAuth } from "./AuthContext";
-import { useBudget } from "./BudgetContext";
-import { useFamily } from "./FamilyContext";
 
-// The ONE source of truth for the family's expenses in the CURRENT month:
-//   Firestore expenses (familyId + monthKey)  ->  expenseService  ->  this context
-// + Add Expense, Add Shared Expense, Shared Expenses, Expense History, the Family Budget and Category
-// Budget spent amounts and the member contributions all read from here.
-//
-// Only SHARED expenses count as spending. Pending expenses (a member's, waiting for the admin) are in
-// `expenses` so lists can show them with a Pending badge, but they are never part of `totals`.
+export type HistoryDateGroup = {
+  dateLabel: string;
+  items: HistoryItem[];
+};
 
-/**
- * idle     - not signed in or no family yet
- * loading  - waiting for this month's expenses
- * ready    - loaded (the month may have none)
- * error    - the listener failed
- */
 export type ExpenseStatusState = "idle" | "loading" | "ready" | "error";
 
 export type AddExpenseValues = {
   categoryId: ExpenseCategoryId;
-  /** Raw text from the amount field, e.g. "20,000". */
   amountText: string;
-  /** Raw DD/MM/YY text. */
   dateText: string;
-  /** memberId who paid; null means the signed-in user. */
   paidBy: string | null;
-  /** memberIds to split between; empty means every active member. */
   splitAmong: string[];
   note: string;
 };
 
 type ExpenseContextValue = {
   status: ExpenseStatusState;
-  /** This month's expenses, shared and pending, newest first. */
   expenses: ExpenseRecord[];
-  /** Totals over SHARED expenses only. */
   totals: ExpenseTotals;
-  /** Whether the signed-in user may add an expense now, and whether it will need approval. */
+  totalSpent: number;
+  historyGroups: HistoryDateGroup[];
+  loading: boolean;
   permission: AddPermission;
-  addExpense: (values: AddExpenseValues) => Promise<{ id: string; status: ExpenseStatus }>;
-  /** Admin only: Pending -> Shared. */
+  addExpense: (values: AddExpenseValues | any) => Promise<any>;
   approveExpense: (expenseId: string) => Promise<void>;
-  /** Last month's SHARED spending, or null if it couldn't be read. */
+  deleteExpense: (expenseId: string) => Promise<void>;
   loadPreviousMonthSpent: () => Promise<number | null>;
 };
 
-type Loaded = {
-  key: string | null;
-  expenses: ExpenseRecord[];
-  state: "loading" | "ready" | "error";
-};
-
-const EMPTY: Loaded = { key: null, expenses: [], state: "loading" };
 const NO_EXPENSES: ExpenseRecord[] = [];
 
-const ExpenseContext = createContext<ExpenseContextValue | undefined>(undefined);
+function formatGroupDate(date: Date): string {
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  ) {
+    return "Today";
+  }
+
+  if (
+    date.getDate() === yesterday.getDate() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getFullYear() === yesterday.getFullYear()
+  ) {
+    return "Yesterday";
+  }
+
+  return date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+const ExpenseContext = createContext<ExpenseContextValue | undefined>(
+  undefined,
+);
 
 export function ExpenseProvider({ children }: { children: ReactNode }) {
   const { user, isSignedIn } = useAuth();
-  const { family, activeMembers, currentMember, isAdmin } = useFamily();
+  const { family, activeMembers, currentMember, members, isAdmin } =
+    useFamily();
   const { budget, monthKey } = useBudget();
 
   const uid = isSignedIn && user ? user.uid : null;
   const familyId = uid ? (family?.id ?? null) : null;
-  // Everything loaded below belongs to exactly one (user, family, month).
   const key = uid && familyId ? `${uid}:${familyId}:${monthKey}` : null;
 
-  const [loaded, setLoaded] = useState<Loaded>(EMPTY);
+  const [synced, setSynced] = useState<{
+    key: string | null;
+    expenses: ExpenseRecord[];
+    state: "loading" | "ready" | "error";
+  }>({
+    key: null,
+    expenses: [],
+    state: "loading",
+  });
 
   useEffect(() => {
     if (!key || !familyId) {
-      setLoaded(EMPTY);
       return;
     }
 
-    setLoaded({ ...EMPTY, key });
     const unsubscribe = subscribeToExpenses(familyId, monthKey, (event) => {
-      setLoaded((prev) => {
-        if (prev.key !== key) return prev; // a newer user/family/month is already active
-        if (event.status === "ready") return { key, expenses: event.expenses, state: "ready" };
+      if (event.status === "ready") {
+        setSynced({ key, expenses: event.expenses, state: "ready" });
+      } else {
         console.warn("[expenses] expense listener failed", event.error);
-        return { key, expenses: [], state: "error" };
-      });
+        setSynced({ key, expenses: [], state: "error" });
+      }
     });
 
     return unsubscribe;
   }, [key, familyId, monthKey]);
 
-  // Only data that belongs to the CURRENT user+family+month is exposed, so a previous account's
-  // expenses can never appear, not even for one render while switching.
-  const current = loaded.key === key ? loaded : EMPTY;
-  const status: ExpenseStatusState = !key ? "idle" : current.state;
-  const expenses = key ? current.expenses : NO_EXPENSES;
+  const isCurrent = Boolean(key && synced.key === key);
+  const status: ExpenseStatusState = !key
+    ? "idle"
+    : isCurrent
+      ? synced.state
+      : "loading";
+  const expenses = isCurrent ? synced.expenses : NO_EXPENSES;
+  const loading = !key || !isCurrent || status === "loading";
 
   const totals = useMemo(() => computeTotals(expenses), [expenses]);
+  const totalSpent = totals.spent;
+
   const permission = useMemo(
     () => getAddPermission({ isAdmin, member: currentMember, budget }),
     [isAdmin, currentMember, budget],
   );
 
+  const historyGroups = useMemo<HistoryDateGroup[]>(() => {
+    if (expenses.length === 0) {
+      return [];
+    }
+
+    const groupsMap = new Map<string, HistoryItem[]>();
+
+    expenses.forEach((exp: any) => {
+      const dateObj = exp.date?.toDate
+        ? exp.date.toDate()
+        : exp.createdAt?.toDate
+          ? exp.createdAt.toDate()
+          : new Date(0);
+      const groupKey = formatGroupDate(dateObj);
+      const timeStr = dateObj.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      const member = members?.find((m) => m.id === exp.paidBy);
+      const payerText = member
+        ? `Paid by ${member.displayName}`
+        : "Paid by member";
+
+      const categoryMeta = getExpenseCategory(exp.categoryId);
+
+      const historyItem: HistoryItem = {
+        id: exp.id,
+        title: exp.title,
+        category: categoryMeta.label as any,
+        time: timeStr,
+        payerText,
+        amount: exp.amount,
+        status: exp.status || "Shared",
+        iconBg: categoryMeta.iconBackground,
+        iconEmoji: categoryMeta.emoji,
+        receiptUri: exp.receiptUri || null,
+        note: exp.note || null,
+      };
+
+      if (!groupsMap.has(groupKey)) {
+        groupsMap.set(groupKey, []);
+      }
+      groupsMap.get(groupKey)!.push(historyItem);
+    });
+
+    return Array.from(groupsMap.entries()).map(([dateLabel, items]) => ({
+      dateLabel,
+      items,
+    }));
+  }, [expenses, members]);
+
   const addExpense = useCallback(
-    (values: AddExpenseValues) => {
+    (values: any) => {
       if (!uid || !familyId) {
-        return Promise.reject(new Error("Your family hasn't loaded yet. Please try again."));
+        return Promise.reject(
+          new Error("Your family hasn't loaded yet. Please try again."),
+        );
       }
       return addExpenseDocument({
         familyId,
@@ -148,17 +224,51 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
     [isAdmin],
   );
 
+  const deleteExpense = useCallback(
+    async (expenseId: string): Promise<void> => {
+      await deleteExpenseService(expenseId);
+    },
+    [],
+  );
+
   const loadPreviousMonthSpent = useCallback(
-    async () => (familyId ? getMonthSpent(familyId, getPreviousMonthKey(monthKey)) : null),
+    async () =>
+      familyId ? getMonthSpent(familyId, getPreviousMonthKey(monthKey)) : null,
     [familyId, monthKey],
   );
 
   const value = useMemo<ExpenseContextValue>(
-    () => ({ status, expenses, totals, permission, addExpense, approveExpense, loadPreviousMonthSpent }),
-    [status, expenses, totals, permission, addExpense, approveExpense, loadPreviousMonthSpent],
+    () => ({
+      status,
+      expenses,
+      totals,
+      totalSpent,
+      historyGroups,
+      loading,
+      permission,
+      addExpense,
+      approveExpense,
+      deleteExpense,
+      loadPreviousMonthSpent,
+    }),
+    [
+      status,
+      expenses,
+      totals,
+      totalSpent,
+      historyGroups,
+      loading,
+      permission,
+      addExpense,
+      approveExpense,
+      deleteExpense,
+      loadPreviousMonthSpent,
+    ],
   );
 
-  return <ExpenseContext.Provider value={value}>{children}</ExpenseContext.Provider>;
+  return (
+    <ExpenseContext.Provider value={value}>{children}</ExpenseContext.Provider>
+  );
 }
 
 export function useExpenses(): ExpenseContextValue {

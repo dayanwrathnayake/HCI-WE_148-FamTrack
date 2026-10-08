@@ -16,4 +16,6 @@ export type HistoryItem = {
   status: ExpenseStatus;
   iconBg: string;
   iconEmoji: string;
+  receiptUri?: string | null;
+  note?: string | null;
 };

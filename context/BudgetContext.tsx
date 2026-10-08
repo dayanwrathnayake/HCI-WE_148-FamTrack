@@ -114,19 +114,18 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!key || !budgetId) {
-      setLoaded(EMPTY);
       return;
     }
 
-    setLoaded({ ...EMPTY, key });
     const unsubscribe = subscribeToBudget(budgetId, (event) => {
-      setLoaded((prev) => {
-        if (prev.key !== key) return prev; // a newer user/month is already active
-        if (event.status === "ready") return { key, budget: event.budget, state: "ready" };
-        if (event.status === "none") return { key, budget: null, state: "none" };
+      if (event.status === "ready") {
+        setLoaded({ key, budget: event.budget, state: "ready" });
+      } else if (event.status === "none") {
+        setLoaded({ key, budget: null, state: "none" });
+      } else {
         console.warn("[budget] budget listener failed", event.error);
-        return { key, budget: null, state: "error" };
-      });
+        setLoaded({ key, budget: null, state: "error" });
+      }
     });
 
     return unsubscribe;
