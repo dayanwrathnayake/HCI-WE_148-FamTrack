@@ -1,4 +1,4 @@
-import { doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, onSnapshot, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
 import type { Budget, CategoryShares, WithId } from "../types/models";
@@ -17,6 +17,7 @@ import { validateBudgetAmount, validateBudgetName } from "../utils/validation";
 // this service and the BudgetContext built on it.
 //
 //   budgets/{familyId}_{YYYY-MM}     one document per family per month
+//   (create/read/update/delete: only the current month's budget can be changed or deleted)
 //
 // The id is deterministic, so a family can never have two budgets for the same month, and a new
 // month never overwrites an earlier one. Nothing derived (spent, left, percentages) is stored.
@@ -180,6 +181,38 @@ export async function saveBudget(input: SaveBudgetInput): Promise<void> {
       throw new BudgetError("rejected", "Couldn't save the budget. Only the family admin can change it.");
     }
     throw new BudgetError("unknown", "Couldn't save the budget. Check your connection and try again.");
+  }
+}
+
+/**
+ * Deletes THIS month's budget (admin only; the rules also refuse any other month, so earlier
+ * budgets stay as history). Expenses do not point at a budget, so they are untouched: the month
+ * simply has no budget until the admin sets one again.
+ */
+export async function deleteBudget(input: {
+  familyId: string;
+  isAdmin: boolean;
+  /** The device's current local month, "YYYY-MM". */
+  monthKey: string;
+}): Promise<void> {
+  if (!input.isAdmin) {
+    throw new BudgetError("not-admin", "Only the family admin can delete the budget.");
+  }
+  if (!input.familyId) {
+    throw new BudgetError("no-family", "Your family hasn't loaded yet. Please try again.");
+  }
+
+  try {
+    await deleteDoc(doc(db, "budgets", getBudgetId(input.familyId, input.monthKey)));
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+    if (code === "permission-denied") {
+      throw new BudgetError("rejected", "Couldn't delete the budget. Only the family admin can delete this month's budget.");
+    }
+    throw new BudgetError("unknown", "Couldn't delete the budget. Check your connection and try again.");
   }
 }
 

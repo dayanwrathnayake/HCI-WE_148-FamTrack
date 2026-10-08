@@ -15,13 +15,14 @@ whatever the rules do not explicitly allow is denied.
 | `families/{id}` | members of that family | created at registration; owner may rename |
 | `families/{id}/members/{id}` | members of that family; a pending member's own invited email | owner adds pending members; the invited person activates their own pending member |
 | `familyInvitations/{email}` | the invited email, the inviting family's owner | owner creates and renews; the invited person accepts |
-| `budgets/{familyId}_{YYYY-MM}` | members of that family | owner only, **current month only** |
-| `expenses/{id}` | members of that family (queries must filter by `familyId`) | members add (Pending) or admin adds (Shared); admin approves Pending to Shared |
+| `budgets/{familyId}_{YYYY-MM}` | members of that family | owner only (create, update, **delete**), **current month only** |
+| `expenses/{id}` | members of that family (queries must filter by `familyId`) | members add (Pending) or admin adds (Shared); admin approves Pending to Shared; admin **edits or deletes** any, a member only their own Pending one; **current month only** |
 
 Principles used throughout: a user belongs to the one family named on their own profile; the admin is the
 family `ownerId`; records are validated field by field (allowed keys, types, ranges); identifying fields
 such as `familyId`, `createdBy` and `startDate` are frozen after creation; derived numbers (spent, left,
-percentages) are never stored; **nothing can be deleted** (no delete rules exist).
+percentages) are never stored. **Deletes are rare and narrow**: only the current month's budget (owner) and
+current-month expenses (see below). Members, families, invitations and profiles cannot be deleted.
 
 ## Invitations (30-day expiry)
 
@@ -45,7 +46,24 @@ percentages) are never stored; **nothing can be deleted** (no delete rules exist
 Budgets and expenses are stored per UTC month. Rules cannot know the user's time zone, so "current month"
 accepts the month of server time minus one day, server time, and server time plus one day. On the first
 or last day of a month the neighbouring month is therefore also writable. This covers every real time zone
-(UTC-12 to UTC+14). Past months cannot be edited: `update` on a budget requires its month to be current.
+(UTC-12 to UTC+14). Past months are read-only history: updating or deleting a budget, and editing or deleting an
+expense, all require the document's month to be current.
+
+## Edit and delete (CRUD)
+
+* **Budget:** the owner can delete the current month's budget. Expenses do not point at a budget (they store only
+  their month), so they are untouched; the month just has no budget until one is set again.
+* **Expense edit:** the admin may edit any current-month expense of the family; a member only their own Pending
+  expense, and only while their own `canAddExpenses` is on. An edit may change only `categoryId`, `title`, `amount`,
+  `paidBy`, `note`, `date` and `monthKey`; the result must pass the same checks as creating (valid amount, date in the
+  current month and not in the future, payer an active member of the same family). `status`, `splitAmong`, `familyId`,
+  `createdBy`, `createdByMember` and `createdAt` are frozen; approval stays its own rule (admin, Pending to Shared,
+  `status` alone). Editing the split is deferred until there is a custom-split screen.
+* **Expense delete:** the admin may delete any current-month expense of the family (a Pending one is a *decline*); a
+  member only their own Pending expense (a *withdrawal*), which stays possible even if their `canAddExpenses` was
+  switched off. A member can never touch a Shared expense or someone else's.
+* An update that changes nothing (for example saving an unchanged form) is allowed; it cannot alter any data.
+* The app mirrors this in `utils/expenseActions.ts`; the rules are what enforce it.
 
 ## Known limitations (accepted for this project)
 
@@ -64,7 +82,9 @@ or last day of a month the neighbouring month is therefore also writable. This c
 5. **Passwords:** the app requires at least 8 characters (`MIN_PASSWORD_LENGTH` in `utils/validation.ts`).
    Firebase itself only requires 6, and this is only checked in the app. Accounts created earlier with 6 or
    7 characters can still sign in.
-6. **Not built yet:** removing members, cancelling invitations, editing or deleting expenses, receipts
+6. **Member edits ignore this month's "members can add expenses" switch.** That switch gates creating an expense,
+   not editing or withdrawing a member's own Pending one.
+7. **Not built yet:** removing members, cancelling invitations, receipts
    (Firebase Storage), App Check, and moving Manage Group, Home, Bills and Savings onto the real backend.
    Until then those screens use mock data and are not protected by any rules.
 
@@ -99,6 +119,8 @@ Requirements: Node, a JDK 21+ (`java -version`; on macOS `brew install --cask te
 ```bash
 npm run test:rules
 ```
+
+See also [`MERGE-NOTES-NADUN.md`](MERGE-NOTES-NADUN.md) for the known conflicts with Nadun's branch.
 
 Files: `setup.mjs` (emulator setup and seed data: two families, an outsider), and one `*.test.mjs` per area:
 profiles/families/members, invitations (including expiry and renewal), budgets, expenses. Tests that

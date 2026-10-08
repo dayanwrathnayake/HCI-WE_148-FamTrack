@@ -10,6 +10,7 @@ import {
 import { AppState } from "react-native";
 
 import {
+  deleteBudget as deleteBudgetDocument,
   getPreviousMonthPrefill,
   saveBudget as saveBudgetDocument,
   subscribeToBudget,
@@ -54,6 +55,8 @@ type BudgetContextValue = {
   budgetId: string | null;
   /** Creates this month's budget or updates its editable fields. Throws BudgetError. */
   saveBudget: (values: SaveBudgetValues) => Promise<void>;
+  /** Admin only: deletes THIS month's budget. Earlier months are never deleted. Throws BudgetError. */
+  deleteBudget: () => Promise<void>;
   /** The previous month's budget values, for pre-filling the form only. Never writes. */
   loadPrefill: () => Promise<BudgetPrefill | null>;
 };
@@ -154,14 +157,21 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     [uid, familyId, isAdmin, monthKey, current.state],
   );
 
+  const deleteBudget = useCallback(async () => {
+    if (!uid || !familyId) {
+      throw new BudgetError("no-family", "Your family hasn't loaded yet. Please try again.");
+    }
+    return deleteBudgetDocument({ familyId, isAdmin, monthKey });
+  }, [uid, familyId, isAdmin, monthKey]);
+
   const loadPrefill = useCallback(
     async () => (familyId ? getPreviousMonthPrefill(familyId, monthKey) : null),
     [familyId, monthKey],
   );
 
   const value = useMemo<BudgetContextValue>(
-    () => ({ status, budget: current.budget, monthKey, budgetId, saveBudget, loadPrefill }),
-    [status, current.budget, monthKey, budgetId, saveBudget, loadPrefill],
+    () => ({ status, budget: current.budget, monthKey, budgetId, saveBudget, deleteBudget, loadPrefill }),
+    [status, current.budget, monthKey, budgetId, saveBudget, deleteBudget, loadPrefill],
   );
 
   return <BudgetContext.Provider value={value}>{children}</BudgetContext.Provider>;

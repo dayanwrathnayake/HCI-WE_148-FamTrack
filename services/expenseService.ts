@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -14,7 +15,8 @@ import {
 import { isExpenseCategoryId, getExpenseCategory } from "../constants/categories";
 import { db } from "../lib/firebase";
 import type { Budget, Expense, ExpenseCategoryId, ExpenseStatus } from "../types/models";
-import { parseBudgetAmount } from "../utils/budget";
+import { getMonthKey, parseBudgetAmount } from "../utils/budget";
+import { getExpenseActions } from "../utils/expenseActions";
 import {
   getAddPermission,
   parseExpenseDate,
@@ -221,6 +223,125 @@ export async function approveExpense(input: { expenseId: string; isAdmin: boolea
       throw new ExpenseError("rejected", "Couldn't approve the expense. It may already have been approved.");
     }
     throw new ExpenseError("unknown", "Couldn't approve the expense. Check your connection and try again.");
+  }
+}
+
+// ------------------------------------------------------------------------------------
+// Editing and deleting (current month only; the rules enforce the same)
+// ------------------------------------------------------------------------------------
+
+type ChangeExpenseContext = {
+  /** The expense as it is now. */
+  expense: ExpenseRecord;
+  /** uid of the signed-in user. */
+  uid: string;
+  isAdmin: boolean;
+  /** The signed-in user's own member document. */
+  member: MemberRecord | null;
+};
+
+function getPermissionCode(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code: unknown }).code)
+    : "";
+}
+
+function actionsFor({ expense, uid, isAdmin, member }: ChangeExpenseContext) {
+  return getExpenseActions({
+    isAdmin,
+    isOwnExpense: expense.createdBy === uid,
+    status: expense.status,
+    isCurrentMonth: expense.monthKey === getMonthKey(),
+    canAddExpenses: member?.canAddExpenses === true,
+  });
+}
+
+export type UpdateExpenseInput = ChangeExpenseContext & {
+  /** Everyone who has joined the family; the allowed payers. */
+  activeMembers: MemberRecord[];
+  categoryId: ExpenseCategoryId;
+  /** Raw text from the amount field, e.g. "20,000". */
+  amountText: string;
+  /** Raw DD/MM/YY or DD/MM/YYYY text. */
+  dateText: string;
+  /** memberId who paid. */
+  paidBy: string;
+  note: string;
+};
+
+/**
+ * Edits an expense's category, amount, payer, date and note. Its status, split and ownership fields
+ * never change here (approval is its own action). The admin may edit any expense of the current month;
+ * a member only their own Pending one. Throws ExpenseError with a message that is safe to show.
+ */
+export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
+  if (!actionsFor(input).includes("edit")) {
+    throw new ExpenseError("not-allowed", "You can't edit this expense.");
+  }
+
+  if (!isExpenseCategoryId(input.categoryId)) {
+    throw new ExpenseError("invalid-category", "Please choose a category.");
+  }
+
+  const amountError = validateExpenseAmount(input.amountText);
+  const amount = parseBudgetAmount(input.amountText);
+  if (amountError || amount === null) {
+    throw new ExpenseError("invalid-amount", amountError ?? "Please enter the amount.");
+  }
+
+  const parsedDate = parseExpenseDate(input.dateText);
+  if (!parsedDate.ok) throw new ExpenseError("invalid-date", parsedDate.error);
+
+  if (!input.activeMembers.some((member) => member.id === input.paidBy)) {
+    throw new ExpenseError("invalid-payer", "The person who paid must be a member of your family.");
+  }
+
+  const note = input.note.trim();
+  const noteError = validateExpenseNote(note);
+  if (noteError) throw new ExpenseError("invalid-note", noteError);
+
+  const day = parsedDate.date;
+  const monthKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}`;
+
+  try {
+    await updateDoc(doc(db, "expenses", input.expense.id), {
+      categoryId: input.categoryId,
+      title: getExpenseCategory(input.categoryId).label,
+      amount,
+      paidBy: input.paidBy,
+      note,
+      date: Timestamp.fromDate(new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()))),
+      monthKey,
+    });
+  } catch (error) {
+    if (getPermissionCode(error) === "permission-denied") {
+      throw new ExpenseError(
+        "rejected",
+        "Couldn't save the changes. This expense may have been approved or changed since you opened it.",
+      );
+    }
+    throw new ExpenseError("unknown", "Couldn't save the changes. Check your connection and try again.");
+  }
+}
+
+/**
+ * Deletes an expense: the admin any expense of the current month (a Pending one is a decline), a member
+ * only their own Pending expense (a withdrawal). Throws ExpenseError with a message safe to show.
+ */
+export async function deleteExpense(input: ChangeExpenseContext): Promise<void> {
+  if (!actionsFor(input).includes("delete")) {
+    throw new ExpenseError("not-allowed", "You can't delete this expense.");
+  }
+  try {
+    await deleteDoc(doc(db, "expenses", input.expense.id));
+  } catch (error) {
+    if (getPermissionCode(error) === "permission-denied") {
+      throw new ExpenseError(
+        "rejected",
+        "Couldn't delete the expense. It may have been approved or changed since you opened it.",
+      );
+    }
+    throw new ExpenseError("unknown", "Couldn't delete the expense. Check your connection and try again.");
   }
 }
 

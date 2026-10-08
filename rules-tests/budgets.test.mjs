@@ -185,11 +185,46 @@ describe("budgets saved before categories existed", () => {
   });
 });
 
-describe("deleting and listing budgets", () => {
-  beforeEach(() => seed(env, [[`budgets/${budgetId(F1)}`, budgetData(F1)]]));
+describe("deleting a budget", () => {
+  beforeEach(() =>
+    seed(env, [
+      [`budgets/${budgetId(F1)}`, budgetData(F1)],
+      [`budgets/${budgetId(F1, -2)}`, budgetData(F1, -2)],
+      [`budgets/${budgetId(F2)}`, budgetData(F2)],
+    ]),
+  );
 
-  it("nobody can delete a budget", async () => {
-    await assertFails(deleteDoc(ref(asAlice(env), F1)));
+  it("the owner can delete this month's budget", async () => {
+    await assertSucceeds(deleteDoc(ref(asAlice(env), F1)));
+  });
+
+  it("the budget is really gone, and the owner can set a new one for the month", async () => {
+    await assertSucceeds(deleteDoc(ref(asAlice(env), F1)));
+    const gone = await assertSucceeds(getDoc(ref(asAlice(env), F1)));
+    if (gone.exists()) throw new Error("the budget should have been deleted");
+    await assertSucceeds(create(asAlice(env)));
+  });
+
+  it("a plain member cannot delete it", async () => {
     await assertFails(deleteDoc(ref(asBob(env), F1)));
+  });
+
+  it("another family's owner and strangers cannot delete it", async () => {
+    await assertFails(deleteDoc(ref(asCarol(env), F1)));
+    await assertFails(deleteDoc(ref(asErin(env), F1)));
+  });
+
+  it("past months are read-only history: not even the owner can delete one", async () => {
+    await assertFails(deleteDoc(ref(asAlice(env), F1, -2)));
+  });
+
+  it("deleting a budget never touches another family's budget", async () => {
+    await assertSucceeds(deleteDoc(ref(asAlice(env), F1)));
+    await assertSucceeds(getDoc(ref(asCarol(env), F2)));
+  });
+
+  it("the owner cannot delete a budget that does not exist", async () => {
+    // Deleting a missing document has no data to check ownership against.
+    await assertFails(deleteDoc(ref(asAlice(env), F1, 5)));
   });
 });

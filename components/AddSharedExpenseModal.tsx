@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { EXPENSE_CATEGORIES } from "../constants/categories";
 import type { ExpenseCategoryId } from "../types/models";
 import { useExpenses } from "../context/ExpenseContext";
 import { useFamily } from "../context/FamilyContext";
 import { getExpenseErrorMessage } from "../services/expenseService";
 import { formatAmountInput, parseBudgetAmount } from "../utils/budget";
-import { formatExpenseDate, getEqualShare } from "../utils/expenses";
+import { formatExpenseDate, getEqualShare, getExpenseDay, type ExpenseRecord } from "../utils/expenses";
 import { getAvatarPalette, getInitials } from "../utils/members";
 import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
 
@@ -29,17 +30,37 @@ const OTHER_TYPE_KEY = "other";
 type AddSharedExpenseModalProps = {
   visible: boolean;
   onClose: () => void;
+  /** When set, the modal edits this expense (category, amount, payer, date, note) instead of adding one. */
+  expense?: ExpenseRecord | null;
 };
 
-export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModalProps) {
-  const { activeMembers, currentMember } = useFamily();
-  const { addExpense, permission } = useExpenses();
+/** Keeps digits only and shapes them as DD/MM/YYYY while typing. */
+function formatDateInput(text: string): string {
+  const digits = text.replace(/[^0-9]/g, "");
+  if (digits.length === 0) return "";
+  const day = parseInt(digits.slice(0, 2), 10) > 31 ? "31" : digits.slice(0, 2);
+  if (digits.length < 3) return day;
+  const month = parseInt(digits.slice(2, 4), 10) > 12 ? "12" : digits.slice(2, 4);
+  if (digits.length < 5) return `${day}/${month}`;
+  return `${day}/${month}/${digits.slice(4, 8)}`;
+}
 
-  const [amount, setAmount] = useState("");
+export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddSharedExpenseModalProps) {
+  const { activeMembers, currentMember } = useFamily();
+  const { addExpense, updateExpense, permission } = useExpenses();
+  const isEdit = expense !== null;
+
+  // In edit mode the form starts from the expense. The parent gives the modal a new `key` per expense,
+  // so these initial values are read fresh each time an edit is opened.
+  const [amount, setAmount] = useState(() => (expense ? formatAmountInput(String(expense.amount)) : ""));
   const [expenseType, setExpenseType] = useState("groceries");
-  const [paidByChoice, setPaidByChoice] = useState<string | null>(null);
+  const [paidByChoice, setPaidByChoice] = useState<string | null>(() => expense?.paidBy ?? null);
   const [saving, setSaving] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  // Edit mode only: any of the eight categories, plus the date and the note.
+  const [editCategory, setEditCategory] = useState<ExpenseCategoryId>(() => expense?.categoryId ?? "other");
+  const [dateText, setDateText] = useState(() => (expense ? formatExpenseDate(getExpenseDay(expense)) : ""));
+  const [note, setNote] = useState(() => expense?.note ?? "");
 
   // Nobody chosen yet means the signed-in user.
   const paidBy = paidByChoice ?? currentMember?.id ?? null;
@@ -61,14 +82,17 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
 
   const numericAmount = parseBudgetAmount(amount) ?? 0;
   // Shared equally between everyone in the family. Each share is derived, never stored.
-  const splitMembersCount = activeMembers.length;
+  // (Editing keeps the expense's own split: it is not changed here.)
+  const splitMembersCount = isEdit ? expense.splitAmong.length : activeMembers.length;
   const eachShare = getEqualShare(numericAmount, splitMembersCount);
-  const canSave = permission.allowed && numericAmount > 0 && !saving;
+  const canSave = (isEdit || permission.allowed) && numericAmount > 0 && !saving;
 
   const resetForm = () => {
     setAmount("");
     setExpenseType("groceries");
     setPaidByChoice(null);
+    setDateText("");
+    setNote("");
     setErrorText(null);
   };
 
@@ -80,6 +104,28 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
 
   const handleSaveExpense = async () => {
     if (!canSave) return;
+
+    if (expense) {
+      setErrorText(null);
+      setSaving(true);
+      try {
+        await updateExpense(expense, {
+          categoryId: editCategory,
+          amountText: amount,
+          dateText,
+          paidBy: paidBy ?? expense.paidBy,
+          note,
+        });
+        resetForm();
+        onClose();
+      } catch (error) {
+        setErrorText(getExpenseErrorMessage(error));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     const categoryId: ExpenseCategoryId =
       expenseType === OTHER_TYPE_KEY
         ? "other"
@@ -117,8 +163,10 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
 
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.title}>Add shared expense</Text>
-              <Text style={styles.subtitle}>Counts against the family budget</Text>
+              <Text style={styles.title}>{isEdit ? "Edit shared expense" : "Add shared expense"}</Text>
+              <Text style={styles.subtitle}>
+                {isEdit ? "Changes update the family budget" : "Counts against the family budget"}
+              </Text>
             </View>
             <Pressable onPress={handleClose} style={styles.closeButton} hitSlop={8}>
               <Text style={styles.closeButtonText}>✕</Text>
@@ -138,7 +186,25 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
             />
           </View>
 
-          <Text style={styles.fieldLabel}>EXPENSE TYPE</Text>
+          <Text style={styles.fieldLabel}>{isEdit ? "CATEGORY" : "EXPENSE TYPE"}</Text>
+          {isEdit ? (
+            <View style={styles.pillWrap}>
+              {EXPENSE_CATEGORIES.map((category) => {
+                const active = editCategory === category.id;
+                return (
+                  <Pressable
+                    key={category.id}
+                    onPress={() => setEditCategory(category.id)}
+                    style={[styles.typePill, active && styles.typePillActive]}
+                  >
+                    <Text style={[styles.typePillText, active && styles.typePillTextActive]}>
+                      {category.emoji} {category.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
           <View style={styles.pillWrap}>
             {EXPENSE_TYPES.map((type) => {
               const active = expenseType === type.key;
@@ -163,6 +229,7 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
               </Text>
             </Pressable>
           </View>
+          )}
 
           <Text style={styles.fieldLabel}>PAID BY</Text>
           <View style={styles.payerRow}>
@@ -188,6 +255,30 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
             })}
           </View>
 
+          {isEdit ? (
+            <>
+              <Text style={styles.fieldLabel}>DATE</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={dateText}
+                onChangeText={(text) => setDateText(formatDateInput(text))}
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor="#a9b1bb"
+                keyboardType="number-pad"
+                maxLength={10}
+              />
+              <Text style={styles.fieldLabel}>NOTE</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={note}
+                onChangeText={setNote}
+                placeholder="Optional"
+                placeholderTextColor="#a9b1bb"
+                maxLength={500}
+              />
+            </>
+          ) : null}
+
           <View style={styles.splitCard}>
             <View>
               <Text style={styles.splitTitle}>Split equally · {splitMembersCount} members</Text>
@@ -195,12 +286,14 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
                 Rs {eachShare.toLocaleString("en-US", { maximumFractionDigits: 2 })} each
               </Text>
             </View>
-            <Pressable onPress={handleChangeSplit} hitSlop={8}>
-              <Text style={styles.changeLink}>Change</Text>
-            </Pressable>
+            {isEdit ? null : (
+              <Pressable onPress={handleChangeSplit} hitSlop={8}>
+                <Text style={styles.changeLink}>Change</Text>
+              </Pressable>
+            )}
           </View>
 
-          {!permission.allowed ? (
+          {isEdit ? null : !permission.allowed ? (
             <Text style={styles.errorText}>{permission.reason}</Text>
           ) : permission.pending ? (
             <Text style={styles.noteText}>Your expense will be sent to the family admin for approval.</Text>
@@ -216,7 +309,7 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
               disabled={!canSave}
               style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
             >
-              <Text style={styles.saveButtonText}>Save expense</Text>
+              <Text style={styles.saveButtonText}>{isEdit ? "Save changes" : "Save expense"}</Text>
             </Pressable>
           </View>
         </View>
@@ -363,6 +456,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
+  },
+  fieldInput: {
+    height: 48,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#e1e5ea",
+    backgroundColor: "#ffffff",
+    fontSize: 14,
+    color: "#0e1116",
   },
   noteText: {
     marginTop: 12,

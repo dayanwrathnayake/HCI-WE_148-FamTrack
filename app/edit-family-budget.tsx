@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomNav } from "../components/AppBottomNav";
@@ -44,7 +44,7 @@ export default function EditFamilyBudgetScreen() {
 
 function EditFamilyBudgetForm() {
   const { status: familyStatus, family, activeMembers, isAdmin } = useFamily();
-  const { status: budgetStatus, budget, monthKey, saveBudget, loadPrefill } = useBudget();
+  const { status: budgetStatus, budget, monthKey, saveBudget, deleteBudget, loadPrefill } = useBudget();
 
   const loaded = budgetStatus === "ready" || budgetStatus === "none";
 
@@ -123,6 +123,29 @@ function EditFamilyBudgetForm() {
     } finally {
       setSaving(false);
     }
+  };
+  // Deletes THIS month's budget (admin only). Earlier months stay as history; expenses are untouched.
+  const handleDeleteBudget = () => {
+    if (!canEdit) return;
+    Alert.alert(
+      "Delete this month's budget?",
+      `${getMonthYearLabel(monthDate(monthKey))} will have no budget until you set one again. Your expenses are not deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setErrorText(null);
+            setSaving(true);
+            deleteBudget()
+              .then(() => router.back())
+              .catch((error) => setErrorText(getBudgetErrorMessage(error)))
+              .finally(() => setSaving(false));
+          },
+        },
+      ],
+    );
   };
   // The period is Monthly only and the start date is the 1st of the current month for now.
   const handleBudgetPeriodPress = () => {};
@@ -320,6 +343,14 @@ function EditFamilyBudgetForm() {
               <Text style={styles.saveButtonText}>Save Changes</Text>
             </Pressable>
           </View>
+
+          {isAdmin && budgetStatus === "ready" ? (
+            <Pressable onPress={handleDeleteBudget} disabled={!canEdit} hitSlop={8} style={styles.deleteBudgetLink}>
+              <Text style={[styles.deleteBudgetText, !canEdit && styles.deleteBudgetTextDisabled]}>
+                Delete this month&apos;s budget
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
 
@@ -340,6 +371,19 @@ function EditFamilyBudgetForm() {
 }
 
 const styles = StyleSheet.create({
+  deleteBudgetLink: {
+    alignSelf: "center",
+    marginTop: 18,
+    paddingVertical: 6,
+  },
+  deleteBudgetText: {
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#d93025",
+  },
+  deleteBudgetTextDisabled: {
+    opacity: 0.4,
+  },
   otherCaption: {
     marginTop: 8,
     fontSize: 11.5,

@@ -11,11 +11,14 @@ import {
 import {
   addExpense as addExpenseDocument,
   approveExpense as approveExpenseDocument,
+  deleteExpense as deleteExpenseDocument,
   getMonthSpent,
   subscribeToExpenses,
+  updateExpense as updateExpenseDocument,
 } from "../services/expenseService";
 import type { ExpenseCategoryId, ExpenseStatus } from "../types/models";
-import { getPreviousMonthKey } from "../utils/budget";
+import { getMonthKey, getPreviousMonthKey } from "../utils/budget";
+import { getExpenseActions, type ExpenseAction } from "../utils/expenseActions";
 import {
   computeTotals,
   getAddPermission,
@@ -56,6 +59,18 @@ export type AddExpenseValues = {
   note: string;
 };
 
+/** What an edit can change. The split, status and ownership of an expense are never edited. */
+export type UpdateExpenseValues = {
+  categoryId: ExpenseCategoryId;
+  /** Raw text from the amount field, e.g. "20,000". */
+  amountText: string;
+  /** Raw DD/MM/YY or DD/MM/YYYY text. */
+  dateText: string;
+  /** memberId who paid. */
+  paidBy: string;
+  note: string;
+};
+
 type ExpenseContextValue = {
   status: ExpenseStatusState;
   /** This month's expenses, shared and pending, newest first. */
@@ -67,6 +82,12 @@ type ExpenseContextValue = {
   addExpense: (values: AddExpenseValues) => Promise<{ id: string; status: ExpenseStatus }>;
   /** Admin only: Pending -> Shared. */
   approveExpense: (expenseId: string) => Promise<void>;
+  /** What the signed-in user may do with this expense (current month only). */
+  getActions: (expense: ExpenseRecord) => ExpenseAction[];
+  /** Edits category, amount, payer, date and note. Throws ExpenseError. */
+  updateExpense: (expense: ExpenseRecord, values: UpdateExpenseValues) => Promise<void>;
+  /** Deletes an expense: the admin declines/deletes, a member withdraws their own Pending one. */
+  deleteExpense: (expense: ExpenseRecord) => Promise<void>;
   /** Last month's SHARED spending, or null if it couldn't be read. */
   loadPreviousMonthSpent: () => Promise<number | null>;
 };
@@ -148,14 +169,64 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
     [isAdmin],
   );
 
+  const getActions = useCallback(
+    (expense: ExpenseRecord) =>
+      getExpenseActions({
+        isAdmin,
+        isOwnExpense: !!uid && expense.createdBy === uid,
+        status: expense.status,
+        isCurrentMonth: expense.monthKey === getMonthKey(),
+        canAddExpenses: currentMember?.canAddExpenses === true,
+      }),
+    [isAdmin, uid, currentMember],
+  );
+
+  const updateExpense = useCallback(
+    (expense: ExpenseRecord, values: UpdateExpenseValues) => {
+      if (!uid) return Promise.reject(new Error("Your family hasn't loaded yet. Please try again."));
+      return updateExpenseDocument({ expense, uid, isAdmin, member: currentMember, activeMembers, ...values });
+    },
+    [uid, isAdmin, currentMember, activeMembers],
+  );
+
+  const deleteExpense = useCallback(
+    (expense: ExpenseRecord) => {
+      if (!uid) return Promise.reject(new Error("Your family hasn't loaded yet. Please try again."));
+      return deleteExpenseDocument({ expense, uid, isAdmin, member: currentMember });
+    },
+    [uid, isAdmin, currentMember],
+  );
+
   const loadPreviousMonthSpent = useCallback(
     async () => (familyId ? getMonthSpent(familyId, getPreviousMonthKey(monthKey)) : null),
     [familyId, monthKey],
   );
 
   const value = useMemo<ExpenseContextValue>(
-    () => ({ status, expenses, totals, permission, addExpense, approveExpense, loadPreviousMonthSpent }),
-    [status, expenses, totals, permission, addExpense, approveExpense, loadPreviousMonthSpent],
+    () => ({
+      status,
+      expenses,
+      totals,
+      permission,
+      addExpense,
+      approveExpense,
+      getActions,
+      updateExpense,
+      deleteExpense,
+      loadPreviousMonthSpent,
+    }),
+    [
+      status,
+      expenses,
+      totals,
+      permission,
+      addExpense,
+      approveExpense,
+      getActions,
+      updateExpense,
+      deleteExpense,
+      loadPreviousMonthSpent,
+    ],
   );
 
   return <ExpenseContext.Provider value={value}>{children}</ExpenseContext.Provider>;

@@ -6,12 +6,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AddFamilyMemberModal } from "../components/AddFamilyMemberModal";
 import { AddSharedExpenseModal } from "../components/AddSharedExpenseModal";
 import { AppBottomNav } from "../components/AppBottomNav";
+import { ExpenseActionSheet, type ExpenseSheetOption } from "../components/ExpenseActionSheet";
 import { ExpenseActivityRow } from "../components/ExpenseActivityRow";
 import { Icon } from "../components/Icon";
 import { MemberInitialsAvatar } from "../components/MemberInitialsAvatar";
 import { useExpenses } from "../context/ExpenseContext";
 import { useFamily } from "../context/FamilyContext";
 import { getExpenseErrorMessage } from "../services/expenseService";
+import { getDeleteLabel, type ExpenseAction } from "../utils/expenseActions";
 import {
   getContributionPercent,
   getExpenseCategoryLabel,
@@ -57,9 +59,19 @@ export default function SharedExpensesScreen() {
   const [filter, setFilter] = useState<string>(ALL_FILTER);
   const [addMemberVisible, setAddMemberVisible] = useState(false);
   const [addExpenseVisible, setAddExpenseVisible] = useState(false);
+  // The expense whose action sheet is open, and the one being edited in the modal.
+  const [actionExpense, setActionExpense] = useState<ExpenseRecord | null>(null);
+  const [editExpense, setEditExpense] = useState<ExpenseRecord | null>(null);
 
   const { status: familyStatus, family, members, activeMembers, currentMember, isAdmin } = useFamily();
-  const { status: expenseStatus, expenses, totals, approveExpense } = useExpenses();
+  const {
+    status: expenseStatus,
+    expenses,
+    totals,
+    approveExpense,
+    deleteExpense,
+    getActions,
+  } = useExpenses();
 
   const memberRows = useMemo<MemberData[]>(
     () =>
@@ -111,11 +123,21 @@ export default function SharedExpensesScreen() {
     return groupExpensesByDay(filtered);
   }, [filter, expenses]);
 
+  // Tapping an expense opens its actions. Which ones appear depends on who you are and on the expense:
+  // the admin can approve (Pending), edit and delete/decline; a member can edit and withdraw their OWN
+  // Pending expense; nothing else. Only the current month can be changed (see utils/expenseActions.ts).
   const handleExpensePress = (expense: ExpenseRecord) => {
-    if (!isAdmin || expense.status !== "Pending") return;
+    if (getActions(expense).length === 0) return;
+    setActionExpense(expense);
+  };
+
+  const describe = (expense: ExpenseRecord) =>
+    `${getExpenseCategoryLabel(expense.categoryId)} · Rs ${expense.amount.toLocaleString("en-US")} paid by ${nameOf(expense.paidBy)}`;
+
+  const confirmApprove = (expense: ExpenseRecord) => {
     Alert.alert(
       "Approve expense?",
-      `${getExpenseCategoryLabel(expense.categoryId)} · Rs ${expense.amount.toLocaleString("en-US")} paid by ${nameOf(expense.paidBy)}.\n\nApproving adds it to the family's spending.`,
+      `${describe(expense)}.\n\nApproving adds it to the family's spending.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -129,6 +151,50 @@ export default function SharedExpensesScreen() {
       ],
     );
   };
+
+  const confirmDelete = (expense: ExpenseRecord) => {
+    const label = getDeleteLabel({ isAdmin, status: expense.status });
+    Alert.alert(
+      `${label}?`,
+      `${describe(expense)}.\n\nThis can't be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: label.split(" ")[0],
+          style: "destructive",
+          onPress: () => {
+            deleteExpense(expense).catch((error) =>
+              Alert.alert("Couldn't delete", getExpenseErrorMessage(error)),
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const handleActionSelected = (action: ExpenseAction) => {
+    const expense = actionExpense;
+    setActionExpense(null);
+    if (!expense) return;
+    // iOS drops an alert or a second modal shown while the sheet is still dismissing.
+    setTimeout(() => {
+      if (action === "approve") confirmApprove(expense);
+      else if (action === "edit") setEditExpense(expense);
+      else confirmDelete(expense);
+    }, 350);
+  };
+
+  const sheetOptions: ExpenseSheetOption[] = actionExpense
+    ? getActions(actionExpense).map((action) => ({
+        action,
+        label:
+          action === "approve"
+            ? "Approve expense"
+            : action === "edit"
+              ? "Edit expense"
+              : getDeleteLabel({ isAdmin, status: actionExpense.status }),
+      }))
+    : [];
 
   return (
     <View style={styles.root}>
@@ -292,7 +358,7 @@ export default function SharedExpensesScreen() {
                         <Pressable
                           key={expense.id}
                           onPress={() => handleExpensePress(expense)}
-                          disabled={!isAdmin || expense.status !== "Pending"}
+                          disabled={getActions(expense).length === 0}
                         >
                           <ExpenseActivityRow
                             initials={getInitials(payer?.displayName ?? "?")}
@@ -331,8 +397,20 @@ export default function SharedExpensesScreen() {
         onClose={() => setAddMemberVisible(false)}
       />
       <AddSharedExpenseModal
-        visible={addExpenseVisible}
-        onClose={() => setAddExpenseVisible(false)}
+        key={editExpense?.id ?? "add"}
+        visible={addExpenseVisible || editExpense !== null}
+        expense={editExpense}
+        onClose={() => {
+          setAddExpenseVisible(false);
+          setEditExpense(null);
+        }}
+      />
+      <ExpenseActionSheet
+        visible={actionExpense !== null}
+        title={actionExpense ? describe(actionExpense) : ""}
+        options={sheetOptions}
+        onSelect={handleActionSelected}
+        onClose={() => setActionExpense(null)}
       />
     </View>
   );

@@ -231,21 +231,21 @@ describe("approving and deleting", () => {
     await assertFails(updateDoc(doc(asCarol(env), EXP), { status: "Shared" }));
   });
 
-  it("approval cannot change anything else", async () => {
+  it("approval cannot be combined with any other change", async () => {
+    // Editing content is its own permission (see expense-actions.test.mjs); status never rides along.
     const db = asAlice(env);
     await assertFails(updateDoc(doc(db, EXP), { status: "Shared", amount: 999999 }));
-    await assertFails(updateDoc(doc(db, EXP), { amount: 999999 }));
     await assertFails(updateDoc(doc(db, EXP), { status: "Shared", paidBy: "alice" }));
   });
 
-  it("an expense cannot go back to Pending or be re-approved", async () => {
+  it("an expense cannot go back to Pending", async () => {
     await seed(env, [[EXP, { ...expense(), createdAt: ts(new Date()) }]]);
     await assertFails(updateDoc(doc(asAlice(env), EXP), { status: "Pending" }));
-    await assertFails(updateDoc(doc(asAlice(env), EXP), { status: "Shared" }));
   });
 
-  it("nobody can delete an expense", async () => {
-    await assertFails(deleteDoc(doc(asAlice(env), EXP)));
-    await assertFails(deleteDoc(doc(asBob(env), EXP)));
+  it("strangers and other families cannot delete an expense", async () => {
+    await assertFails(deleteDoc(doc(asErin(env), EXP)));
+    await assertFails(deleteDoc(doc(asCarol(env), EXP)));
+    await assertFails(deleteDoc(doc(env.unauthenticatedContext().firestore(), EXP)));
   });
 });

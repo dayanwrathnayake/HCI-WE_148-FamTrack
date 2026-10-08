@@ -22,7 +22,9 @@ rules_version = '2';
 //   budgets/{familyId}_{YYYY-MM}             - one budget per family per month (id is enforced);
 //                                              its `categories` map holds each category's % share
 //   expenses/{expenseId}                     - one expense: familyId + monthKey; a member's expense is
-//                                              Pending until the admin approves it (-> Shared)
+//                                              Pending until the admin approves it (-> Shared); the admin
+//                                              may edit/delete it, a member only their own Pending one,
+//                                              and only in the current month
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -234,6 +236,15 @@ service cloud.firestore {
         );
     }
 
+    // A member's own expense that is still waiting for the admin: the member may change or withdraw it.
+    function isOwnPendingExpense(expense) {
+      return expense.createdBy == request.auth.uid
+        && expense.status == 'Pending'
+        && isMemberOf(expense.familyId)
+        && get(memberPath(expense.familyId, expense.createdByMember)).data.userId == request.auth.uid
+        && get(memberPath(expense.familyId, expense.createdByMember)).data.status == 'active';
+    }
+
     // ---------- users ----------
     match /users/{uid} {
       // Own profile only. No list, update or delete for now.
@@ -375,8 +386,9 @@ service cloud.firestore {
 
     // ---------- budgets ----------
     // One document per family per month, so earlier months are never overwritten and a family
-    // cannot have two budgets for the same month. No delete and no list (the client reads the
-    // current month's document by its id).
+    // cannot have two budgets for the same month. The owner may delete the CURRENT month's budget
+    // only; earlier months are read-only history. No list (the client reads the current month's
+    // document by its id).
     match /budgets/{budgetId} {
       // Any member of the family, including for a month that has no budget yet.
       allow get: if isMemberOf(budgetFamilyId(budgetId));
@@ -405,11 +417,21 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses', 'categories'])
         && validBudgetShape(request.resource.data);
+
+      // Family owner (admin) only, and only the current month's budget. Expenses do not point at a
+      // budget (they store only their month), so deleting it leaves them untouched.
+      allow delete: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && isCurrentMonthKey(monthKeyOf(resource.data.startDate));
     }
 
     // ---------- expenses ----------
-    // One document per expense. No delete and no editing: the only change allowed is the admin
-    // approving a Pending expense (Pending -> Shared). Reading needs the query to filter by familyId.
+    // One document per expense. Reading needs the query to filter by familyId. Changes after
+    // creation, CURRENT MONTH ONLY (earlier months are read-only history):
+    //   - the admin approves a Pending expense (Pending -> Shared);
+    //   - the admin edits or deletes any expense of the family (deleting a Pending one declines it);
+    //   - a member edits or deletes (withdraws) only their OWN expense while it is still Pending.
+    // Ownership fields, status and the split are never changed by an edit.
     match /expenses/{expenseId} {
       allow get, list: if isMemberOf(resource.data.familyId);
 
@@ -429,6 +451,28 @@ service cloud.firestore {
         && resource.data.status == 'Pending'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'Shared';
+
+      // Editing: only the content fields below can change (status, the split, familyId, createdBy,
+      // createdByMember and createdAt cannot), the result must be a valid expense dated in the
+      // current month, and the payer must be an active member of the same family.
+      allow update: if signedIn()
+        && isCurrentMonthKey(resource.data.monthKey)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['categoryId', 'title', 'amount', 'paidBy', 'note', 'date', 'monthKey'])
+        && validExpenseShape(request.resource.data)
+        && validExpenseDate(request.resource.data)
+        && get(memberPath(resource.data.familyId, request.resource.data.paidBy)).data.status == 'active'
+        && (
+          isOwnerOf(resource.data.familyId)
+          || (isOwnPendingExpense(resource.data)
+              && get(memberPath(resource.data.familyId, resource.data.createdByMember)).data.canAddExpenses == true)
+        );
+
+      // Deleting: the admin any current-month expense of the family (a Pending one is a decline), a
+      // member only their own Pending expense (a withdrawal).
+      allow delete: if signedIn()
+        && isCurrentMonthKey(resource.data.monthKey)
+        && (isOwnerOf(resource.data.familyId) || isOwnPendingExpense(resource.data));
     }
   }
 }
