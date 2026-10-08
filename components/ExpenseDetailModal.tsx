@@ -181,7 +181,8 @@ export function ExpenseDetailModal({
             <Pressable
               onPress={handleConfirmDelete}
               disabled={deleting}
-              className="flex-1 h-[48px] rounded-full items-center justify-center bg-red-50 border border-red-200 active:opacity-80"
+              className="flex-1 h-[48px] rounded-full items-center justify-center bg-red-50 border border-red-200"
+              style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
             >
               {deleting ? (
                 <ActivityIndicator color="#dc2626" size="small" />
@@ -195,7 +196,8 @@ export function ExpenseDetailModal({
             <Pressable
               onPress={onClose}
               disabled={deleting}
-              className="flex-[1.5] h-[48px] rounded-full bg-[#05bf78] items-center justify-center active:opacity-90"
+              className="flex-[1.5] h-[48px] rounded-full bg-[#05bf78] items-center justify-center"
+              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
             >
               <Text className="text-[15px] font-bold text-white">Done</Text>
             </Pressable>

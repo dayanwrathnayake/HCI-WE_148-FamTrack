@@ -27,7 +27,8 @@ export function MemberControlRow({
     <View>
       <Pressable
         onPress={onPress}
-        className="flex-row items-center justify-between py-3 active:opacity-75"
+        className="flex-row items-center justify-between py-3"
+        style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
       >
         <View className="flex-row items-center gap-3 flex-1 mr-2">
           <MemberInitialsAvatar

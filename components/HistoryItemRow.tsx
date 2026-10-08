@@ -32,7 +32,8 @@ export function HistoryItemRow({
     <View key={item.id}>
       <Pressable
         onPress={() => onPress?.(item)}
-        className="flex-row items-center justify-between py-1 active:opacity-75"
+        className="flex-row items-center justify-between py-1"
+        style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
       >
         <View className="flex-row items-center gap-3 flex-1">
           <View
