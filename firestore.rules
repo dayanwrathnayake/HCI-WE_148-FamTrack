@@ -230,19 +230,9 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
-    // ---------- saving goals ----------
+        // ---------- saving goals ----------
     match /savingGoals/{goalId} {
-      allow read: if signedIn() && isMemberOf(resource.data.familyId);
-
-      allow create: if signedIn() 
-        && isMemberOf(request.resource.data.familyId)
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.targetAmount is number
-        && request.resource.data.targetAmount > 0;
-
-      allow update, delete: if signedIn() 
-        && isMemberOf(resource.data.familyId)
-        && (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId));
+      allow read, write: if signedIn();
     }
 
     // ---------- recurring Bills ----------

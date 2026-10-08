@@ -11,6 +11,7 @@ import { useFamily } from "./FamilyContext";
 import {
   createSavingGoal,
   CreateSavingGoalInput,
+  deleteSavingGoal,
   SavingGoalDoc,
   subscribeToFamilySavingGoals,
 } from "../services/savingsService";
@@ -24,6 +25,7 @@ type SavingsContextType = {
   addGoal: (
     input: Omit<CreateSavingGoalInput, "familyId" | "createdBy">,
   ) => Promise<string>;
+  deleteGoal: (goalId: string) => Promise<void>;
 };
 
 const SavingsContext = createContext<SavingsContextType | undefined>(undefined);
@@ -91,9 +93,13 @@ export function SavingsProvider({ children }: { children: React.ReactNode }) {
     [familyId, user],
   );
 
+  const deleteGoal = useCallback(async (goalId: string): Promise<void> => {
+    await deleteSavingGoal(goalId);
+  }, []);
+
   const contextValue = useMemo(
-    () => ({ goals, totalSavings, loading, addGoal }),
-    [goals, totalSavings, loading, addGoal],
+    () => ({ goals, totalSavings, loading, addGoal, deleteGoal }),
+    [goals, totalSavings, loading, addGoal, deleteGoal],
   );
 
   return (

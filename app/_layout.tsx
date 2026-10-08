@@ -1,6 +1,5 @@
 import "../global.css";
-
-import { Stack, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -10,18 +9,9 @@ import { BillsProvider } from "../context/BillsContext";
 import { ExpenseProvider } from "../context/ExpenseContext";
 import { FamilyProvider } from "../context/FamilyContext";
 import { SavingsProvider } from "../context/SavingsContext";
-import { markOnboardingCompleted } from "../services/onboardingService";
 
 function RootNavigator() {
   const { isSignedIn, initializing } = useAuth();
-  const firstSegment: string | undefined = useSegments()[0];
-
-  // Reaching Login or Register means onboarding is finished (or was skipped).
-  useEffect(() => {
-    if (firstSegment === "login" || firstSegment === "register") {
-      void markOnboardingCompleted();
-    }
-  }, [firstSegment]);
 
   return (
     <View style={styles.root}>

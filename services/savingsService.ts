@@ -1,6 +1,8 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -57,6 +59,10 @@ export async function createSavingGoal(
 
   const docRef = await addDoc(collection(db, "savingGoals"), goalData);
   return docRef.id;
+}
+
+export async function deleteSavingGoal(goalId: string): Promise<void> {
+  await deleteDoc(doc(db, "savingGoals", goalId));
 }
 
 export function subscribeToFamilySavingGoals(
