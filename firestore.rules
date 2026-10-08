@@ -184,6 +184,8 @@ service cloud.firestore {
           && get(invitationPath(authEmail())).data.familyId == familyId
           && get(invitationPath(authEmail())).data.memberId == memberId
           && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
+
+        allow delete: if signedIn();
       }
     }
 
@@ -210,6 +212,8 @@ service cloud.firestore {
         && existsAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
         && getAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
              .data.inviteEmail == request.resource.data.email;
+        
+        allow delete: if signedIn();
 
       // The invited person accepting. Only `status` may change (pending -> accepted),
       // so familyId, memberId, email, invitedBy and createdAt are all frozen.
@@ -272,5 +276,31 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidByText'])
         );
     }
+
+    // ---------- budgets ----------
+    match /budgets/{budgetId} {
+      allow get: if isMemberOf(budgetFamilyId(budgetId));
+
+      allow create: if signedIn()
+        && validBudgetShape(request.resource.data)
+        && isOwnerOf(request.resource.data.familyId)
+        && budgetId == request.resource.data.familyId + '_' + monthKeyOf(request.resource.data.startDate)
+        && isCurrentMonthKey(monthKeyOf(request.resource.data.startDate))
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.startDate.day() == 1
+        && request.resource.data.startDate.hours() == 0
+        && request.resource.data.startDate.minutes() == 0
+        && request.resource.data.startDate.seconds() == 0
+        && request.resource.data.startDate.nanos() == 0;
+
+      allow update: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && isCurrentMonthKey(monthKeyOf(resource.data.startDate))
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses', 'categories'])
+        && validBudgetShape(request.resource.data);
+    }
+
+  
   }
 }

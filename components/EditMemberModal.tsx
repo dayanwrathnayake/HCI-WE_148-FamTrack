@@ -1,4 +1,13 @@
-import { Alert, Modal, Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
 import { getAvatarPalette, getInitials, MemberRecord } from "../utils/members";
 
@@ -6,62 +15,86 @@ type Props = {
   visible: boolean;
   member: MemberRecord | null;
   onClose: () => void;
-  onRemove?: (id: string) => void;
+  onRemove?: (member: MemberRecord) => Promise<void>;
+  isAdmin?: boolean;
 };
 
-export function EditMemberModal({ visible, member, onClose, onRemove }: Props) {
+export function EditMemberModal({
+  visible,
+  member,
+  onClose,
+  onRemove,
+  isAdmin = true,
+}: Props) {
+  const [removing, setRemoving] = useState(false);
   if (!member) return null;
 
   const palette = getAvatarPalette(member.id);
   const initials = getInitials(member.displayName);
   const isPending = member.status === "pending";
-  const isAdmin = member.role === "admin";
+  const isSelf = member.role === "admin";
 
-  const handleRemove = () => {
+  const performRemove = async () => {
     if (!onRemove) return;
-    Alert.alert(
-      "Remove Member",
-      `Are you sure you want to remove ${member.displayName} from this family group?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            onRemove(member.id);
-            onClose();
-          },
-        },
-      ],
-    );
+    try {
+      setRemoving(true);
+      await onRemove(member);
+      onClose();
+    } catch (error: any) {
+      if (Platform.OS === "web") {
+        window.alert(error.message || "Failed to remove member.");
+      } else {
+        Alert.alert("Error", error.message || "Failed to remove member.");
+      }
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const handleConfirmRemove = () => {
+    const message = `Are you sure you want to ${isPending ? "cancel the invitation for" : "remove"} ${member.displayName}?`;
+
+    // Cross-platform check: Web browser doesn't execute Alert.alert button callbacks
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        performRemove();
+      }
+      return;
+    }
+
+    Alert.alert(isPending ? "Cancel Invitation" : "Remove Member", message, [
+      { text: "No", style: "cancel" },
+      {
+        text: isPending ? "Cancel Invite" : "Remove",
+        style: "destructive",
+        onPress: performRemove,
+      },
+    ]);
   };
 
   return (
     <Modal
-      visible={visible}
+      visible={visible && member !== null}
       transparent
       animationType="slide"
       onRequestClose={onClose}
     >
       <View className="flex-1 justify-end bg-black/50">
         <Pressable className="flex-1" onPress={onClose} />
-        <View className="bg-white rounded-t-[28px] p-6 gap-5 shadow-xl">
+        <View className="bg-white rounded-t-[28px] p-6 gap-4 shadow-xl">
           <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3 flex-1 mr-2">
+            <View className="flex-row items-center gap-3">
               <MemberInitialsAvatar
                 initials={initials}
                 backgroundColor={palette.background}
                 textColor={palette.text}
                 size={44}
               />
-              <View className="flex-1">
-                <Text
-                  className="text-[17px] font-bold text-[#111827]"
-                  numberOfLines={1}
-                >
+              <View>
+                <Text className="text-[17px] font-bold text-[#111827]">
                   {member.displayName}
                 </Text>
-                <Text className="text-[12px] text-[#64748b]" numberOfLines={1}>
+                <Text className="text-[12px] text-[#64748b]">
                   {member.inviteEmail || "Family Member"}
                 </Text>
               </View>
@@ -92,9 +125,7 @@ export function EditMemberModal({ visible, member, onClose, onRemove }: Props) {
             <View className="flex-row justify-between">
               <Text className="text-[13px] text-[#64748b]">Status:</Text>
               <Text
-                className={`text-[13px] font-bold capitalize ${
-                  isPending ? "text-[#d97706]" : "text-[#05bf78]"
-                }`}
+                className={`text-[13px] font-bold capitalize ${isPending ? "text-[#b45309]" : "text-[#05bf78]"}`}
               >
                 {isPending ? "Pending Invitation" : "Active Member"}
               </Text>
@@ -107,24 +138,30 @@ export function EditMemberModal({ visible, member, onClose, onRemove }: Props) {
             </View>
           </View>
 
-          <View className="gap-2.5 mt-1">
+          <View className="flex-row gap-3 mt-1">
+            {isAdmin && !isSelf && (
+              <Pressable
+                onPress={handleConfirmRemove}
+                disabled={removing}
+                className="flex-1 h-[48px] rounded-full items-center justify-center bg-red-50 border border-red-200"
+              >
+                {removing ? (
+                  <ActivityIndicator color="#dc2626" size="small" />
+                ) : (
+                  <Text className="text-[14px] font-bold text-red-600">
+                    {isPending ? "Cancel Invite" : "Remove"}
+                  </Text>
+                )}
+              </Pressable>
+            )}
+
             <Pressable
               onPress={onClose}
-              className="h-[48px] rounded-full bg-[#05bf78] items-center justify-center"
+              disabled={removing}
+              className="flex-1 h-[48px] rounded-full bg-[#05bf78] items-center justify-center"
             >
               <Text className="text-[14px] font-bold text-white">Done</Text>
             </Pressable>
-
-            {onRemove && !isAdmin && (
-              <Pressable
-                onPress={handleRemove}
-                className="h-[44px] rounded-full bg-red-50 items-center justify-center border border-red-200"
-              >
-                <Text className="text-[13.5px] font-bold text-red-600">
-                  {isPending ? "Cancel Invitation" : "Remove From Family"}
-                </Text>
-              </Pressable>
-            )}
           </View>
         </View>
       </View>

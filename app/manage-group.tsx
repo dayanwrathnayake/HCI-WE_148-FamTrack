@@ -23,7 +23,8 @@ import { getInviteErrorMessage } from "../services/familyService";
 import { getAvatarPalette, getInitials, MemberRecord } from "../utils/members";
 
 export default function ManageGroupScreen() {
-  const { family, members, isAdmin, inviteMember, status } = useFamily();
+  const { family, members, isAdmin, inviteMember, removeMember, status } =
+    useFamily();
 
   const [autoSync, setAutoSync] = useState(true);
   const [inviteViaQr, setInviteViaQr] = useState(true);
@@ -280,7 +281,18 @@ export default function ManageGroupScreen() {
       <EditMemberModal
         visible={selectedMember !== null}
         member={selectedMember}
+        isAdmin={isAdmin}
         onClose={() => setSelectedMember(null)}
+        onRemove={async (member) => {
+          await removeMember(member.id, member.inviteEmail);
+          setSelectedMember(null);
+          Alert.alert(
+            "Success",
+            member.status === "pending"
+              ? `Invitation for ${member.displayName} has been cancelled.`
+              : `${member.displayName} has been removed from the family.`,
+          );
+        }}
       />
 
       <ShareInviteModal
