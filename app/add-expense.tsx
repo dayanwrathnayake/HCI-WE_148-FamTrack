@@ -2,7 +2,6 @@ import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -14,36 +13,56 @@ import { CategoryPicker } from "../components/CategoryPicker";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
 import { ReceiptPicker } from "../components/ReceiptPicker";
-import { CategoryOption } from "../constants/expense";
+import {
+  EXPENSE_CATEGORIES,
+  type ExpenseCategoryDefinition,
+} from "../constants/categories";
+import type { SelectableMember } from "../constants/expense";
 import { useExpenses } from "../context/ExpenseContext";
 import { useFamily } from "../context/FamilyContext";
-import type { MemberRecord } from "../utils/members";
+import { getExpenseErrorMessage } from "../services/expenseService";
+import { formatExpenseDate } from "../utils/expenses";
+import { getAvatarPalette, getInitials } from "../utils/members";
 
 export default function AddExpenseScreen() {
-  const { family, activeMembers, currentMember } = useFamily();
-  const { addExpense } = useExpenses();
+  const { activeMembers, currentMember } = useFamily();
+  const { addExpense, permission } = useExpenses();
 
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(() => formatExpenseDate(new Date()));
   const [note, setNote] = useState("");
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
   const [selectedCategory, setSelectedCategory] =
-    useState<CategoryOption | null>(null);
+    useState<ExpenseCategoryDefinition | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  const [customPayers, setCustomPayers] = useState<MemberRecord[] | null>(null);
-  const [splitMembers, setSplitMembers] = useState<MemberRecord[]>([]);
+  const memberOptions = useMemo<SelectableMember[]>(
+    () =>
+      activeMembers.map((member) => {
+        const palette = getAvatarPalette(member.id);
+        return {
+          key: member.id,
+          name: member.id === currentMember?.id ? "You" : member.displayName,
+          initials: getInitials(member.displayName),
+          avatarColor: palette.background,
+          avatarTextColor: palette.text,
+        };
+      }),
+    [activeMembers, currentMember],
+  );
 
-  const payers = useMemo(() => {
-    if (customPayers !== null) return customPayers;
-    return currentMember ? [currentMember] : [];
-  }, [customPayers, currentMember]);
+  const [payers, setPayers] = useState<SelectableMember[]>([]);
+  const [splitMembers, setSplitMembers] = useState<SelectableMember[]>([]);
 
   const isValid =
     amount.trim().length > 0 &&
     Number(amount.replace(/,/g, "")) > 0 &&
     selectedCategory !== null &&
-    payers.length > 0;
+    (permission ? permission.allowed : true) &&
+    !submitting;
 
   const handleAmountChange = (text: string) => {
     const rawNumber = text.replace(/[^0-9]/g, "");
@@ -82,59 +101,21 @@ export default function AddExpenseScreen() {
   };
 
   const handleAddExpense = async () => {
-    if (
-      !isValid ||
-      !selectedCategory ||
-      payers.length === 0 ||
-      !family ||
-      !currentMember
-    )
-      return;
-
+    if (!isValid || !selectedCategory) return;
+    setErrorText(null);
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      const parsedAmount = Math.round(Number(amount.replace(/,/g, "")));
-
-      let y: number, m: number, d: number;
-      if (date.length === 10) {
-        const parts = date.split("/").map(Number);
-        d = parts[0];
-        m = parts[1] - 1;
-        y = parts[2];
-      } else {
-        const today = new Date();
-        d = today.getDate();
-        m = today.getMonth();
-        y = today.getFullYear();
-      }
-      const utcExpenseDate = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
-
-      const isAdmin =
-        currentMember.role === "admin" ||
-        family.ownerId === currentMember.userId;
-      const calculatedStatus = isAdmin ? "Shared" : "Pending";
-
       await addExpense({
-        title: note.trim() !== "" ? note.trim() : selectedCategory.label,
-        categoryId: selectedCategory.key,
-        amount: parsedAmount,
-        paidBy: payers[0].id,
-        splitAmong:
-          splitMembers.length > 0
-            ? splitMembers.map((mem) => mem.id)
-            : [payers[0].id],
-        status: calculatedStatus,
-        date: utcExpenseDate,
-        note: note.trim(),
-        receiptUri: receiptUri,
+        categoryId: selectedCategory.id,
+        amountText: amount,
+        dateText: date,
+        paidBy: payers[0]?.key ?? null,
+        splitAmong: splitMembers.map((member) => member.key),
+        note,
       });
-
-      router.replace("/expense-history");
-    } catch (error: any) {
-      Alert.alert(
-        "Error",
-        error.message || "Failed to add expense. Please try again.",
-      );
+      handleBack();
+    } catch (error) {
+      setErrorText(getExpenseErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -162,11 +143,70 @@ export default function AddExpenseScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {permission && !permission.allowed ? (
+          <Text className="text-[12.5px] font-medium text-[#c2410c] text-center">
+            {permission.reason}
+          </Text>
+        ) : permission && permission.pending ? (
+          <Text className="text-[12.5px] font-medium text-[#8a93a0] text-center">
+            Your expense will be sent to the family admin for approval.
+          </Text>
+        ) : null}
+
         <View className="bg-white rounded-[20px] p-5 shadow-sm shadow-black/10 elevation-2">
-          <CategoryPicker
-            selectedCategory={selectedCategory}
-            onSelectCategory={(cat) => setSelectedCategory(cat)}
-          />
+          <Pressable
+            className="flex-row items-center h-[48px] rounded-[12px] border border-[#e1e5ea] px-4 gap-3 bg-white"
+            onPress={() => setShowCategoryPicker((v) => !v)}
+          >
+            {selectedCategory ? (
+              <>
+                <Text className="text-[18px]">{selectedCategory.emoji}</Text>
+                <Text className="flex-1 text-[15px] font-medium text-[#111827]">
+                  {selectedCategory.label}
+                </Text>
+              </>
+            ) : (
+              <Text className="flex-1 text-[14px] font-medium text-[#9ca3af]">
+                Select category...
+              </Text>
+            )}
+
+            <Text className="text-[14px] text-[#8a93a0]">
+              {showCategoryPicker ? "▴" : "▾"}
+            </Text>
+          </Pressable>
+
+          {showCategoryPicker && (
+            <View className="flex-row flex-wrap gap-2 mt-3">
+              {EXPENSE_CATEGORIES.map((cat) => {
+                const active = cat.id === selectedCategory?.id;
+
+                return (
+                  <Pressable
+                    key={cat.id}
+                    onPress={() => {
+                      setSelectedCategory(cat);
+                      setShowCategoryPicker(false);
+                    }}
+                    className={`flex-row items-center gap-1.5 h-[36px] rounded-full px-3 border ${
+                      active
+                        ? "bg-[#e8f8f0] border-[#00c46a]"
+                        : "bg-white border-[#e1e5ea]"
+                    }`}
+                  >
+                    <Text className="text-[14px]">{cat.emoji}</Text>
+                    <Text
+                      className={`text-[13px] font-semibold ${
+                        active ? "text-[#00854b]" : "text-[#5d6673]"
+                      }`}
+                    >
+                      {cat.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           <View className="flex-row gap-3 mt-4">
             <View className="flex-1">
@@ -210,22 +250,23 @@ export default function AddExpenseScreen() {
           <MemberSelector
             label="Payer"
             selectedMembers={payers}
-            allMembers={activeMembers}
-            onAdd={(m) => setCustomPayers([...payers, m])}
-            onRemove={(id) =>
-              setCustomPayers(payers.filter((x) => x.id !== id))
-            }
+            allMembers={memberOptions}
+            onAdd={(m) => setPayers([m])}
+            onRemove={(k) => setPayers((p) => p.filter((x) => x.key !== k))}
           />
 
           <MemberSelector
             label="Split between"
             selectedMembers={splitMembers}
-            allMembers={activeMembers}
+            allMembers={memberOptions}
             onAdd={(m) => setSplitMembers((s) => [...s, m])}
             onRemove={(id) =>
-              setSplitMembers((s) => s.filter((x) => x.id !== id))
+              setSplitMembers((s) => s.filter((x) => x.key !== id))
             }
           />
+          <Text className="text-[11.5px] text-[#8a93a0] mt-2">
+            Payer defaults to you. Split defaults to everyone in the family.
+          </Text>
 
           <Text className="text-[13px] font-semibold text-[#111827] mt-4 mb-2">
             Note / Title
@@ -246,6 +287,18 @@ export default function AddExpenseScreen() {
           onSelectReceipt={(uri) => setReceiptUri(uri)}
           onRemoveReceipt={() => setReceiptUri(null)}
         />
+        {receiptUri ? (
+          <Text className="text-[12px] font-medium text-[#8a93a0] text-center -mt-2">
+            Receipts aren&apos;t saved yet. This photo won&apos;t be uploaded
+            with the expense.
+          </Text>
+        ) : null}
+
+        {errorText ? (
+          <Text className="text-[12.5px] font-medium text-[#c2410c] text-center">
+            {errorText}
+          </Text>
+        ) : null}
 
         <View className="flex-row gap-3">
           <Pressable

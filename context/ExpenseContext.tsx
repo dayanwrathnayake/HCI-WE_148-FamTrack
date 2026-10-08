@@ -1,48 +1,72 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
+import { useBudget } from "./BudgetContext";
 import { useFamily } from "./FamilyContext";
+import { getExpenseCategory } from "../constants/categories";
+import type { HistoryItem } from "../constants/history";
 import {
-  CATEGORY_ICONS,
-  HistoryDateGroup,
-  HistoryItem,
-  MOCK_HISTORY_GROUPS,
-} from "../constants/history";
-import {
-  createExpense,
-  CreateExpenseInput,
+  addExpense as addExpenseDocument,
+  approveExpense as approveExpenseDocument,
   deleteExpense as deleteExpenseService,
-  subscribeToFamilyExpenses,
+  getMonthSpent,
+  subscribeToExpenses,
 } from "../services/expenseService";
-import type { Expense, WithId } from "../types/models";
+import type { ExpenseCategoryId } from "../types/models";
+import { getPreviousMonthKey } from "../utils/budget";
+import {
+  computeTotals,
+  getAddPermission,
+  type AddPermission,
+  type ExpenseRecord,
+  type ExpenseTotals,
+} from "../utils/expenses";
 
-type ExpenseContextType = {
-  expenses: WithId<Expense>[];
-  historyGroups: HistoryDateGroup[];
+export type HistoryDateGroup = {
+  dateLabel: string;
+  items: HistoryItem[];
+};
+
+export type ExpenseStatusState = "idle" | "loading" | "ready" | "error";
+
+export type AddExpenseValues = {
+  categoryId: ExpenseCategoryId;
+  amountText: string;
+  dateText: string;
+  paidBy: string | null;
+  splitAmong: string[];
+  note: string;
+};
+
+type ExpenseContextValue = {
+  status: ExpenseStatusState;
+  expenses: ExpenseRecord[];
+  totals: ExpenseTotals;
   totalSpent: number;
+  historyGroups: HistoryDateGroup[];
   loading: boolean;
-  addExpense: (
-    input: Omit<CreateExpenseInput, "familyId" | "createdBy">,
-  ) => Promise<string>;
+  permission: AddPermission;
+  addExpense: (values: AddExpenseValues | any) => Promise<any>;
+  approveExpense: (expenseId: string) => Promise<void>;
   deleteExpense: (expenseId: string) => Promise<void>;
+  loadPreviousMonthSpent: () => Promise<number | null>;
 };
 
-type ExpensesState = {
-  familyId: string | null;
-  expenses: WithId<Expense>[];
-  loading: boolean;
+type Loaded = {
+  key: string | null;
+  expenses: ExpenseRecord[];
+  state: "loading" | "ready" | "error";
 };
 
-const INITIAL_STATE: ExpensesState = {
-  familyId: null,
-  expenses: [],
-  loading: false,
-};
+const EMPTY: Loaded = { key: null, expenses: [], state: "loading" };
+const NO_EXPENSES: ExpenseRecord[] = [];
 
 function formatGroupDate(date: Date): string {
   const today = new Date();
@@ -72,87 +96,89 @@ function formatGroupDate(date: Date): string {
   });
 }
 
-const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
+const ExpenseContext = createContext<ExpenseContextValue | undefined>(
+  undefined,
+);
 
-export function ExpenseProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  const { family, members } = useFamily();
-  const familyId = family?.id ?? null;
+export function ExpenseProvider({ children }: { children: ReactNode }) {
+  const { user, isSignedIn } = useAuth();
+  const { family, activeMembers, currentMember, members, isAdmin } =
+    useFamily();
+  const { budget, monthKey } = useBudget();
 
-  const [state, setState] = useState<ExpensesState>(INITIAL_STATE);
+  const uid = isSignedIn && user ? user.uid : null;
+  const familyId = uid ? (family?.id ?? null) : null;
+  const key = uid && familyId ? `${uid}:${familyId}:${monthKey}` : null;
+
+  const [loaded, setLoaded] = useState<Loaded>(EMPTY);
 
   useEffect(() => {
-    if (!familyId) return;
+    if (!key || !familyId) {
+      return;
+    }
 
-    const unsubscribe = subscribeToFamilyExpenses(
-      familyId,
-      (liveExpenses) => {
-        setState({ familyId, expenses: liveExpenses, loading: false });
-      },
-      () => {
-        setState({ familyId, expenses: [], loading: false });
-      },
-    );
+    const unsubscribe = subscribeToExpenses(familyId, monthKey, (event) => {
+      setLoaded((prev) => {
+        if (prev.key !== key) return prev;
+        if (event.status === "ready")
+          return { key, expenses: event.expenses, state: "ready" };
+        console.warn("[expenses] expense listener failed", event.error);
+        return { key, expenses: [], state: "error" };
+      });
+    });
 
-    return () => unsubscribe();
-  }, [familyId]);
+    return unsubscribe;
+  }, [key, familyId, monthKey]);
 
-  const expenses = useMemo(
-    () => (state.familyId === familyId ? state.expenses : []),
-    [state.familyId, state.expenses, familyId],
-  );
+  const current = loaded.key === key ? loaded : EMPTY;
+  const status: ExpenseStatusState = !key ? "idle" : current.state;
+  const expenses = key ? current.expenses : NO_EXPENSES;
+  const loading = status === "loading";
 
-  const loading = familyId
-    ? state.familyId === familyId
-      ? state.loading
-      : true
-    : false;
+  const totals = useMemo(() => computeTotals(expenses), [expenses]);
+  const totalSpent = totals.spent;
 
-  const totalSpent = useMemo(
-    () => expenses.reduce((sum, item) => sum + item.amount, 0),
-    [expenses],
+  const permission = useMemo(
+    () => getAddPermission({ isAdmin, member: currentMember, budget }),
+    [isAdmin, currentMember, budget],
   );
 
   const historyGroups = useMemo<HistoryDateGroup[]>(() => {
     if (expenses.length === 0) {
-      return !familyId ? MOCK_HISTORY_GROUPS : [];
+      return [];
     }
 
     const groupsMap = new Map<string, HistoryItem[]>();
 
-    expenses.forEach((exp) => {
-      const dateObj = exp.date?.toDate ? exp.date.toDate() : new Date();
+    expenses.forEach((exp: any) => {
+      const dateObj = exp.date?.toDate
+        ? exp.date.toDate()
+        : exp.createdAt?.toDate
+          ? exp.createdAt.toDate()
+          : new Date(0);
       const groupKey = formatGroupDate(dateObj);
       const timeStr = dateObj.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
 
-      const member = members.find((m) => m.id === exp.paidBy);
+      const member = members?.find((m) => m.id === exp.paidBy);
       const payerText = member
         ? `Paid by ${member.displayName}`
         : "Paid by member";
 
-      const rawCategory = (exp.categoryId || "Food").toLowerCase();
-      const capitalizedCategory =
-        rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1);
-
-      const categoryConfig = CATEGORY_ICONS[capitalizedCategory] ||
-        CATEGORY_ICONS[exp.title] || {
-          emoji: "💸",
-          bg: "#10b981",
-        };
+      const categoryMeta = getExpenseCategory(exp.categoryId);
 
       const historyItem: HistoryItem = {
         id: exp.id,
         title: exp.title,
-        category: capitalizedCategory as any,
+        category: categoryMeta.label as any,
         time: timeStr,
         payerText,
         amount: exp.amount,
         status: exp.status || "Shared",
-        iconBg: categoryConfig.bg,
-        iconEmoji: categoryConfig.emoji,
+        iconBg: categoryMeta.iconBackground,
+        iconEmoji: categoryMeta.emoji,
         receiptUri: exp.receiptUri || null,
         note: exp.note || null,
       };
@@ -167,46 +193,84 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       dateLabel,
       items,
     }));
-  }, [expenses, familyId, members]);
+  }, [expenses, members]);
 
-  const addExpense = async (
-    input: Omit<CreateExpenseInput, "familyId" | "createdBy">,
-  ): Promise<string> => {
-    if (!familyId || !user) {
-      throw new Error("You must be part of a family to add expenses.");
-    }
+  const addExpense = useCallback(
+    (values: any) => {
+      if (!uid || !familyId) {
+        return Promise.reject(
+          new Error("Your family hasn't loaded yet. Please try again."),
+        );
+      }
+      return addExpenseDocument({
+        familyId,
+        uid,
+        member: currentMember,
+        isAdmin,
+        budget,
+        activeMembers,
+        ...values,
+      });
+    },
+    [uid, familyId, currentMember, isAdmin, budget, activeMembers],
+  );
 
-    return createExpense({
-      ...input,
-      familyId,
-      createdBy: user.uid,
-    });
-  };
+  const approveExpense = useCallback(
+    (expenseId: string) => approveExpenseDocument({ expenseId, isAdmin }),
+    [isAdmin],
+  );
 
-  const deleteExpense = async (expenseId: string): Promise<void> => {
-    return deleteExpenseService(expenseId);
-  };
+  const deleteExpense = useCallback(
+    async (expenseId: string): Promise<void> => {
+      await deleteExpenseService(expenseId);
+    },
+    [],
+  );
+
+  const loadPreviousMonthSpent = useCallback(
+    async () =>
+      familyId ? getMonthSpent(familyId, getPreviousMonthKey(monthKey)) : null,
+    [familyId, monthKey],
+  );
+
+  const value = useMemo<ExpenseContextValue>(
+    () => ({
+      status,
+      expenses,
+      totals,
+      totalSpent,
+      historyGroups,
+      loading,
+      permission,
+      addExpense,
+      approveExpense,
+      deleteExpense,
+      loadPreviousMonthSpent,
+    }),
+    [
+      status,
+      expenses,
+      totals,
+      totalSpent,
+      historyGroups,
+      loading,
+      permission,
+      addExpense,
+      approveExpense,
+      deleteExpense,
+      loadPreviousMonthSpent,
+    ],
+  );
 
   return (
-    <ExpenseContext.Provider
-      value={{
-        expenses,
-        historyGroups,
-        totalSpent,
-        loading,
-        addExpense,
-        deleteExpense,
-      }}
-    >
-      {children}
-    </ExpenseContext.Provider>
+    <ExpenseContext.Provider value={value}>{children}</ExpenseContext.Provider>
   );
 }
 
-export function useExpenses() {
-  const context = useContext(ExpenseContext);
-  if (!context) {
+export function useExpenses(): ExpenseContextValue {
+  const value = useContext(ExpenseContext);
+  if (!value) {
     throw new Error("useExpenses must be used within an ExpenseProvider");
   }
-  return context;
+  return value;
 }

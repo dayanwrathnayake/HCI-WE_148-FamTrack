@@ -184,26 +184,6 @@ export default function RecurringBillsScreen() {
                 )}
               </View>
 
-              <Pressable
-                onPress={() => router.push("/manage-group")}
-                style={{
-                  backgroundColor: "#05bf78",
-                  padding: 12,
-                  borderRadius: 8,
-                  margin: 16,
-                }}
-              >
-                <Text
-                  style={{
-                    color: "white",
-                    fontWeight: "bold",
-                    textAlign: "center",
-                  }}
-                >
-                  Open Manage Group (Dev Test)
-                </Text>
-              </Pressable>
-
               <View className="gap-2.5">
                 <Text className="text-[14px] font-bold text-[#111827]">
                   Paid Bills This Month ({filteredPaid.length})

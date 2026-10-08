@@ -10,6 +10,17 @@ export type Relationship = "Parent" | "Child" | "Other";
 export type MemberStatus = "pending" | "active";
 export type InvitationStatus = "pending" | "accepted";
 export type BudgetPeriod = "weekly" | "monthly" | "yearly";
+/** The budget categories a family can allocate a share to. "other" is implicit and never stored. */
+export type CategoryId =
+  | "food"
+  | "groceries"
+  | "shopping"
+  | "transport"
+  | "bills"
+  | "health"
+  | "entertainment";
+/** Whole-number percentages of the monthly budget. Their sum is at most 100; the rest is "Other". */
+export type CategoryShares = Partial<Record<CategoryId, number>>;
 export type ExpenseStatus = "Shared" | "Pending";
 
 /** users/{uid} — the document id is the Firebase Auth uid. */
@@ -64,29 +75,35 @@ export type Budget = {
   startDate: Timestamp;
   alertPercentage: number; // 0-100
   membersCanAddExpenses: boolean;
+  /**
+   * Percentage share per category (rupee allocations and "Other" are derived, never stored).
+   * Budgets saved before categories existed have no map; the services read them as the defaults.
+   */
+  categories: CategoryShares;
   createdBy: string; // uid
 };
 
-/** categoryBudgets/{id} — the rupee allocation is derived: amount * percentage / 100. */
-export type CategoryBudget = {
-  budgetId: string;
-  familyId: string;
-  categoryId: string;
-  percentage: number; // 0-100
-};
+/** An expense's category: any budget category, or "other" (which is never given a budget share). */
+export type ExpenseCategoryId = CategoryId | "other";
 
-/** expenses/{expenseId} */
+/**
+ * expenses/{expenseId}. The month's budget is always `{familyId}_{monthKey}`, so no budgetId is
+ * stored. Spent totals, per-category and per-member totals and each person's equal share are
+ * derived from these records, never stored.
+ */
 export type Expense = {
   familyId: string;
-  budgetId: string;
-  categoryId: string;
-  title: string;
+  monthKey: string; // "YYYY-MM", derived from `date`
+  categoryId: ExpenseCategoryId;
+  title: string; // the category's label unless a screen has a title field
   amount: number; // integer rupees
   paidBy: string; // memberId (members may not have an account)
-  splitAmong: string[]; // memberIds
-  status: ExpenseStatus;
+  splitAmong: string[]; // memberIds, shared equally
+  status: ExpenseStatus; // "Pending" until the admin approves; only "Shared" counts as spending
+  note: string; // free text, may be empty
+  date: Timestamp; // the chosen day at 00:00:00 UTC
   createdBy: string; // uid
-  date: Timestamp;
+  createdByMember: string; // memberId of the creator
   createdAt: Timestamp;
   note?: string | null;
   receiptUri?: string | null;

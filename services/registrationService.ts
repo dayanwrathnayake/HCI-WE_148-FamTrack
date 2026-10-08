@@ -4,6 +4,7 @@ import { collection, doc, getDoc, serverTimestamp, writeBatch } from "firebase/f
 import { withAuthFlow } from "../lib/authFlow";
 import { db } from "../lib/firebase";
 import type { FamilyInvitation, FamilyMember } from "../types/models";
+import { isInvitationExpired } from "../utils/invitations";
 import { deleteAuthUser, getAuthErrorMessage, signOutUser, signUpWithEmail } from "./authService";
 
 // Registration = create the Auth user, then write the Firestore profile in ONE atomic
@@ -12,7 +13,8 @@ import { deleteAuthUser, getAuthErrorMessage, signOutUser, signUpWithEmail } fro
 //   - otherwise                          -> create their first family and make them Admin
 //
 // NOTE: invitations are matched by email and emails are not verified (see firestore.rules),
-// so whoever registers first with an invited address takes the invitation.
+// so whoever registers first with an invited address takes the invitation. An invitation
+// can only be claimed for 30 days; after that registration creates a new family instead.
 
 export type RegisterInput = {
   name: string;
@@ -52,16 +54,35 @@ export function defaultFamilyName(fullName: string): string {
 
 type PendingInvite = { familyId: string; memberId: string };
 
+function isPermissionDenied(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === "permission-denied"
+  );
+}
+
 async function findPendingInvite(email: string): Promise<PendingInvite | null> {
   const invitationSnap = await getDoc(doc(db, "familyInvitations", email));
   if (!invitationSnap.exists()) return null;
   const invitation = invitationSnap.data() as FamilyInvitation;
   if (invitation.status !== "pending") return null;
+  // An expired invitation cannot be claimed: register normally and get your own family.
+  if (isInvitationExpired(invitation.createdAt)) return null;
 
-  // Make sure the member the invite points at still exists and is still waiting.
-  const memberSnap = await getDoc(
-    doc(db, "families", invitation.familyId, "members", invitation.memberId),
-  );
+  // Make sure the member the invite points at still exists and is still waiting. The rules only
+  // let this person read that member while it is pending for their email, so a missing or
+  // already-taken member comes back as permission-denied and means "no valid invitation".
+  let memberSnap;
+  try {
+    memberSnap = await getDoc(
+      doc(db, "families", invitation.familyId, "members", invitation.memberId),
+    );
+  } catch (error) {
+    if (isPermissionDenied(error)) return null;
+    throw error;
+  }
   if (!memberSnap.exists()) return null;
   const member = memberSnap.data() as FamilyMember;
   if (member.status !== "pending" || member.inviteEmail !== email) return null;

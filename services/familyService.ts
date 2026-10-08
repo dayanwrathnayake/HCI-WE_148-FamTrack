@@ -4,16 +4,19 @@ import {
   getDoc,
   onSnapshot,
   serverTimestamp,
+  updateDoc,
   writeBatch,
 } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
 import type {
   Family,
+  FamilyInvitation,
   FamilyMember,
   Relationship,
   WithId,
 } from "../types/models";
+import { isInvitationExpired } from "../utils/invitations";
 import { validateInviteContact, validateMemberName } from "../utils/validation";
 
 // ONE backend for family + members. Every screen that shows or edits family members
@@ -27,6 +30,8 @@ import { validateInviteContact, validateMemberName } from "../utils/validation";
 //
 // NOTE: an invitation is only consumed when the invited email REGISTERS a new account.
 // Someone who already has an account is not linked by it (accept-on-login is not built).
+// An invitation can be claimed for 30 days (utils/invitations.ts); inviting the same email again
+// after that renews it.
 
 export type FamilyEvent =
   | { status: "ready"; family: WithId<Family> }
@@ -152,7 +157,7 @@ export const normalizeInviteEmail = (value: string) =>
  */
 export async function inviteFamilyMember(
   input: InviteInput,
-): Promise<{ memberId: string }> {
+): Promise<{ memberId: string; renewed: boolean }> {
   if (!input.isAdmin) {
     throw new InviteError(
       "not-admin",
@@ -173,16 +178,23 @@ export async function inviteFamilyMember(
   ) {
     throw new InviteError("own-email", "That's your own email address.");
   }
-  if (input.existingMembers.some((m) => m.inviteEmail === email)) {
+
+  const alreadyInvited = input.existingMembers.find(
+    (m) => m.inviteEmail === email,
+  );
+  if (alreadyInvited) {
+    if (
+      alreadyInvited.status === "pending" &&
+      (await renewExpiredInvitation(input.familyId, email, alreadyInvited.id))
+    ) {
+      return { memberId: alreadyInvited.id, renewed: true };
+    }
     throw new InviteError(
       "already-in-family",
       "That email has already been invited to your family.",
     );
   }
 
-  // The rules let the family admin read an invitation of THEIR family, so an existing one
-  // shows up here. (An invitation from another family, or no invitation at all, both come
-  // back as permission-denied; the batch below then decides.)
   try {
     const existing = await getDoc(doc(db, "familyInvitations", email));
     if (existing.exists()) {
@@ -193,7 +205,6 @@ export async function inviteFamilyMember(
     }
   } catch (error) {
     if (error instanceof InviteError) throw error;
-    // permission-denied / offline: fall through to the atomic write.
   }
 
   const memberRef = doc(collection(db, "families", input.familyId, "members"));
@@ -236,7 +247,54 @@ export async function inviteFamilyMember(
     );
   }
 
-  return { memberId: memberRef.id };
+  return { memberId: memberRef.id, renewed: false };
+}
+
+/**
+ * Restarts the 30 days of an EXPIRED, still-pending invitation of this family for this member.
+ */
+async function renewExpiredInvitation(
+  familyId: string,
+  email: string,
+  memberId: string,
+): Promise<boolean> {
+  const ref = doc(db, "familyInvitations", email);
+  let invitation: FamilyInvitation;
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return false;
+    invitation = snap.data() as FamilyInvitation;
+  } catch {
+    return false;
+  }
+  if (
+    invitation.familyId !== familyId ||
+    invitation.memberId !== memberId ||
+    invitation.status !== "pending" ||
+    !isInvitationExpired(invitation.createdAt)
+  ) {
+    return false;
+  }
+
+  try {
+    await updateDoc(ref, { createdAt: serverTimestamp() });
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+    if (code === "permission-denied") {
+      throw new InviteError(
+        "rejected",
+        "That invitation can't be renewed right now.",
+      );
+    }
+    throw new InviteError(
+      "unknown",
+      "Couldn't renew the invitation. Check your connection and try again.",
+    );
+  }
+  return true;
 }
 
 export function getInviteErrorMessage(error: unknown): string {

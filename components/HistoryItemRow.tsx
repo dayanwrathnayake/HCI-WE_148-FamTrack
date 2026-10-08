@@ -10,11 +10,6 @@ const BADGE_STYLES: Record<
     border: "border-[#9de3c0]",
     text: "text-[#00854b]",
   },
-  Personal: {
-    bg: "bg-[#eff6ff]",
-    border: "border-[#bfdbfe]",
-    text: "text-[#2563eb]",
-  },
   Pending: {
     bg: "bg-[#fefce8]",
     border: "border-[#fef08a]",

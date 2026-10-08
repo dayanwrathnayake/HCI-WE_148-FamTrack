@@ -9,6 +9,9 @@ export type SelectableMember = {
   name?: string;
   displayName?: string;
   avatar?: any;
+  initials?: string;
+  avatarColor?: string;
+  avatarTextColor?: string;
 };
 
 type Props<T extends SelectableMember> = {
@@ -19,6 +22,38 @@ type Props<T extends SelectableMember> = {
   onRemove: (idOrKey: string) => void;
 };
 
+function MemberPicture({
+  member,
+  size,
+}: {
+  member: SelectableMember;
+  size: number;
+}) {
+  if (member.avatar) {
+    return (
+      <Image
+        source={member.avatar}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  const id = member.id || member.key || "";
+  const name = member.displayName || member.name || "";
+  const palette = getAvatarPalette(id);
+  const initials = member.initials ?? getInitials(name);
+
+  return (
+    <MemberInitialsAvatar
+      initials={initials || "?"}
+      backgroundColor={member.avatarColor ?? palette.background}
+      textColor={member.avatarTextColor ?? palette.text}
+      size={size}
+    />
+  );
+}
+
 export function MemberSelector<T extends SelectableMember>({
   label,
   selectedMembers,
@@ -28,8 +63,8 @@ export function MemberSelector<T extends SelectableMember>({
 }: Props<T>) {
   const [showPicker, setShowPicker] = useState(false);
 
-  const getMemberId = (m: T) => m.id || m.key || "";
-  const getMemberName = (m: T) => m.displayName || m.name || "";
+  const getMemberId = (m: T) => m.key || m.id || "";
+  const getMemberName = (m: T) => m.name || m.displayName || "";
 
   const available = allMembers.filter(
     (m) => !selectedMembers.some((s) => getMemberId(s) === getMemberId(m)),
@@ -45,28 +80,13 @@ export function MemberSelector<T extends SelectableMember>({
         {selectedMembers.map((m) => {
           const id = getMemberId(m);
           const name = getMemberName(m);
-          const palette = getAvatarPalette(id);
-          const initials = getInitials(name);
 
           return (
             <View
               key={id}
               className="flex-row items-center gap-1.5 h-[34px] rounded-full pl-1.5 pr-2.5 bg-[#e8f8f0] border border-[#9de3c0]"
             >
-              {m.avatar ? (
-                <Image
-                  source={m.avatar}
-                  style={{ width: 22, height: 22, borderRadius: 11 }}
-                  resizeMode="cover"
-                />
-              ) : (
-                <MemberInitialsAvatar
-                  initials={initials}
-                  backgroundColor={palette.background}
-                  textColor={palette.text}
-                  size={22}
-                />
-              )}
+              <MemberPicture member={m} size={22} />
               <Text className="text-[13px] font-semibold text-[#00854b]">
                 {name}
               </Text>
@@ -96,8 +116,6 @@ export function MemberSelector<T extends SelectableMember>({
           {available.map((m) => {
             const id = getMemberId(m);
             const name = getMemberName(m);
-            const palette = getAvatarPalette(id);
-            const initials = getInitials(name);
 
             return (
               <Pressable
@@ -108,20 +126,7 @@ export function MemberSelector<T extends SelectableMember>({
                 }}
                 className="flex-row items-center gap-1.5 h-[32px] rounded-full pl-1.5 pr-2.5 bg-white border border-gray-300"
               >
-                {m.avatar ? (
-                  <Image
-                    source={m.avatar}
-                    style={{ width: 20, height: 20, borderRadius: 10 }}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <MemberInitialsAvatar
-                    initials={initials}
-                    backgroundColor={palette.background}
-                    textColor={palette.text}
-                    size={20}
-                  />
-                )}
+                <MemberPicture member={m} size={20} />
                 <Text className="text-[12px] font-medium text-gray-700">
                   {name}
                 </Text>
