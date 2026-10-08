@@ -31,13 +31,13 @@ export function AddTransactionSheet({ visible, onClose, onIncome, onExpense }: P
             <View style={styles.actions}>
               <Pressable accessibilityRole="button" accessibilityLabel="Add Income" onPress={() => close(onIncome)} style={styles.action}>
                 {({ pressed }) => <View style={[styles.card, styles.income, pressed && styles.pressed]}>
-                  <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 20V4m-7 7 7-7 7 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
+                  <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m-7-7 7 7 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
                   <Text style={styles.actionText}>Add Income</Text><Text style={styles.subtitle}>Salary, gifts, etc.</Text>
                 </View>}
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Add Expense" onPress={() => close(onExpense)} style={styles.action}>
                 {({ pressed }) => <View style={[styles.card, styles.expense, pressed && styles.pressed]}>
-                  <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 4v16m-7-7 7 7 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
+                  <View style={styles.iconTile}><SvgXml width={28} height={28} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"><path d="M12 20V4m-7 7 7-7 7 7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'} /></View>
                   <Text style={styles.actionText}>Add Expense</Text><Text style={styles.subtitle}>Bills, shopping, etc.</Text>
                 </View>}
               </Pressable>

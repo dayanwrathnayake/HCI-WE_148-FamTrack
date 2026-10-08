@@ -84,7 +84,9 @@ function AccountForm({ profile, memberId, familyReady }: { profile: WithId<UserP
                 <View style={[styles.field, !!errors.phone && styles.invalid]}><Text style={styles.label}>Phone Number (optional)</Text><TextInput editable={!busy} accessibilityLabel="Phone Number" value={phone} onChangeText={value => { setPhone(value); setMessage(""); }} style={styles.input} keyboardType="phone-pad" autoComplete="tel" maxLength={25} /></View>
                 {errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
               </View>
-              <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy, busy }} onPress={save} style={({ pressed }) => [styles.save, (pressed || busy) && styles.pressed]}>{busy ? <ActivityIndicator color="#062a1e" /> : <Text style={styles.saveText}>Save</Text>}</Pressable>
+              <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy, busy }} onPress={save} style={styles.saveButton}>
+                {({ pressed }) => <View style={[styles.save, (pressed || busy) && styles.pressed]}>{busy ? <ActivityIndicator color="#062a1e" /> : <Text style={styles.saveText}>Save</Text>}</View>}
+              </Pressable>
               {!!message && <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text>}
             </View>
           </ScrollView>
@@ -111,7 +113,8 @@ const styles = StyleSheet.create({
   field: { minHeight: 65, borderWidth: 1, borderColor: "#bcbcbc", borderRadius: 23, backgroundColor: "#ffffff", paddingHorizontal: 20, paddingVertical: 12 },
   label: { color: "#7f88a0", fontSize: 12, marginBottom: 3 },
   input: { padding: 0, fontSize: 14, color: "#11182d", minHeight: 22 },
-  save: { alignSelf: "center", marginTop: 24, height: 49, width: 128, borderRadius: 25, backgroundColor: "#1acba3", alignItems: "center", justifyContent: "center" },
+  saveButton: { alignSelf: "center", marginTop: 24, width: 128, maxWidth: "100%", borderRadius: 25, overflow: "hidden" },
+  save: { alignSelf: "center", minHeight: 49, width: 128, maxWidth: "100%", paddingVertical: 12, borderRadius: 25, backgroundColor: "#1acba3", alignItems: "center", justifyContent: "center" },
   saveText: { fontSize: 16, fontWeight: "700", color: "#000000" },
   invalid: { borderColor: "#dc2626" },
   error: { color: "#b91c1c", fontSize: 12, marginHorizontal: 8 },
