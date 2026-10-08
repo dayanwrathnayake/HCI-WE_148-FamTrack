@@ -94,7 +94,8 @@ export function ShareInviteModal({
 
           <Pressable
             onPress={handleCopyCode}
-            className="flex-row items-center gap-2 bg-[#e8f8f0] px-4 py-2 rounded-full border border-[#a7f3d0] active:opacity-80"
+            className="flex-row items-center gap-2 bg-[#e8f8f0] px-4 py-2 rounded-full border border-[#a7f3d0]"
+            style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
           >
             <Text
               className="text-[12.5px] font-bold text-[#00854b] tracking-wider"
@@ -109,7 +110,8 @@ export function ShareInviteModal({
 
           <Pressable
             onPress={handleShareInviteLink}
-            className="w-full h-[46px] rounded-full bg-[#05bf78] items-center justify-center active:opacity-90 mt-1"
+            className="w-full h-[46px] rounded-full bg-[#05bf78] items-center justify-center mt-1"
+            style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
           >
             <Text className="text-white font-bold text-[14px]">
               Share Invite Code

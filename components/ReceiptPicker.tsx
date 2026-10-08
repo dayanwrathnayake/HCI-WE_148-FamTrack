@@ -67,7 +67,8 @@ export function ReceiptPicker({
   return (
     <Pressable
       onPress={handlePickReceipt}
-      className="flex-row items-center justify-center gap-2 h-[50px] rounded-full bg-white border border-[#d1d5db] active:bg-gray-50"
+      className="flex-row items-center justify-center gap-2 h-[50px] rounded-full bg-white border border-[#d1d5db]"
+      style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
     >
       <Text className="text-[16px]">📎</Text>
       <Text className="text-[15px] font-semibold text-[#374151]">

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
 import { before, beforeEach, after, test } from "node:test";
 import { createRequire } from "node:module";

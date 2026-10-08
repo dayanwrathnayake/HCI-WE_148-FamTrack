@@ -155,7 +155,8 @@ export function SavingGoalCard({ goal }: Props) {
             onPress={handleDelete}
             disabled={deleting}
             hitSlop={8}
-            className="w-[28px] h-[28px] rounded-full bg-red-50 border border-red-100 items-center justify-center active:bg-red-100"
+            className="w-[28px] h-[28px] rounded-full bg-red-50 border border-red-100 items-center justify-center"
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
           >
             {deleting ? (
               <ActivityIndicator size="small" color="#dc2626" />

@@ -128,7 +128,8 @@ export function BillItemRow({ bill, isLast = false }: Props) {
             {bill.status === "UNPAID" && (
               <Pressable
                 onPress={handleTogglePaid}
-                className="bg-[#fef3c7] px-2 py-0.5 rounded-[6px] active:bg-[#fde68a]"
+                className="bg-[#fef3c7] px-2 py-0.5 rounded-[6px]"
+                style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
               >
                 <Text className="text-[9px] font-extrabold tracking-wider text-[#b45309]">
                   UNPAID (Mark Paid)
@@ -155,7 +156,8 @@ export function BillItemRow({ bill, isLast = false }: Props) {
             onPress={handleDelete}
             disabled={deleting}
             hitSlop={8}
-            className="w-[28px] h-[28px] rounded-full bg-red-50 border border-red-100 items-center justify-center active:bg-red-100 ml-1"
+            className="w-[28px] h-[28px] rounded-full bg-red-50 border border-red-100 items-center justify-center ml-1"
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
           >
             {deleting ? (
               <ActivityIndicator size="small" color="#dc2626" />

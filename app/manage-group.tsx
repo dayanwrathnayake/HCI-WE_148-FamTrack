@@ -149,7 +149,8 @@ export default function ManageGroupScreen() {
                     <Pressable
                       key={m.id}
                       onPress={() => setSelectedMember(m)}
-                      className="items-center gap-1.5 active:opacity-80"
+                      className="items-center gap-1.5"
+                      style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
                     >
                       <MemberInitialsAvatar
                         initials={initials}
@@ -252,15 +253,16 @@ export default function ManageGroupScreen() {
           {isAdmin && (
             <Pressable
               onPress={handleDeleteGroup}
-              className="h-[50px] rounded-full items-center justify-center active:opacity-90 mt-2"
-              style={{
+              className="h-[50px] rounded-full items-center justify-center mt-2"
+              style={({ pressed }) => ({
                 backgroundColor: "#ff6b6b",
                 shadowColor: "#ff6b6b",
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.25,
                 shadowRadius: 6,
                 elevation: 3,
-              }}
+                opacity: pressed ? 0.85 : 1,
+              })}
             >
               <Text className="text-white text-[15px] font-bold">
                 Delete Family Group
