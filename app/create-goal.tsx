@@ -44,15 +44,16 @@ export default function CreateGoalScreen() {
   const [selectedCategory, setSelectedCategory] = useState<GoalCategory | null>(
     null,
   );
-  const [selectedContributors, setSelectedContributors] = useState<
-    MemberRecord[]
-  >([]);
+
+  const [customContributors, setCustomContributors] = useState<
+    MemberRecord[] | null
+  >(null);
   const [submitting, setSubmitting] = useState(false);
 
   const contributors = useMemo(() => {
-    if (selectedContributors.length > 0) return selectedContributors;
+    if (customContributors !== null) return customContributors;
     return currentMember ? [currentMember] : [];
-  }, [selectedContributors, currentMember]);
+  }, [customContributors, currentMember]);
 
   const isValid =
     goalTitle.trim().length > 0 &&
@@ -226,7 +227,7 @@ export default function CreateGoalScreen() {
                   className="flex-1 min-w-0 text-[14px] font-medium text-[#1f2937] p-0 outline-none"
                   value={targetDate}
                   onChangeText={handleDateChange}
-                  placeholder="DD/MM/YYYY"
+                  placeholder="DD/MM/YY"
                   placeholderTextColor="#9ca3af"
                   keyboardType="numeric"
                   maxLength={10}
@@ -255,11 +256,9 @@ export default function CreateGoalScreen() {
             label="Contributors"
             selectedMembers={contributors}
             allMembers={activeMembers}
-            onAdd={(m) => setSelectedContributors((p) => [...p, m])}
+            onAdd={(m) => setCustomContributors([...contributors, m])}
             onRemove={(id) =>
-              setSelectedContributors((p) =>
-                contributors.filter((x) => x.id !== id),
-              )
+              setCustomContributors(contributors.filter((x) => x.id !== id))
             }
           />
 

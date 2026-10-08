@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +15,16 @@ import { useSavings } from "../../context/SavingsContext";
 
 export default function SavingsGoalsScreen() {
   const { goals, totalSavings, loading } = useSavings();
+
+  const totalTarget = useMemo(
+    () => goals.reduce((sum, g) => sum + (g.targetAmount || 0), 0),
+    [goals],
+  );
+
+  const overallProgress = useMemo(() => {
+    if (totalTarget === 0) return 0;
+    return Math.min(100, Math.round((totalSavings / totalTarget) * 100));
+  }, [totalSavings, totalTarget]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -80,7 +91,9 @@ export default function SavingsGoalsScreen() {
 
           <View className="self-start mt-2 bg-white/20 px-3 py-1 rounded-full">
             <Text className="text-white text-[12px] font-bold">
-              + 12.5% this month
+              {goals.length > 0
+                ? `🎯 ${overallProgress}% of target reached`
+                : "🎯 Start your first goal"}
             </Text>
           </View>
         </View>

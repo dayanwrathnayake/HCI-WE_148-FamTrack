@@ -228,16 +228,13 @@ service cloud.firestore {
     // ---------- expenses ----------
     match /expenses/{expenseId} {
       allow read: if signedIn() && isMemberOf(resource.data.familyId);
-      
-      allow create: if signedIn() 
-        && isMemberOf(request.resource.data.familyId)
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.amount is number
-        && request.resource.data.amount > 0;
 
-      allow update, delete: if signedIn() 
-        && isMemberOf(resource.data.familyId)
-        && (resource.data.createdBy == request.auth.uid || isFamilyAdmin(resource.data.familyId));
+      allow create: if signedIn()
+        && isMemberOf(request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow update, delete: if signedIn()
+        && isMemberOf(resource.data.familyId);
     }
 
     // ---------- saving goals ----------
@@ -301,6 +298,7 @@ service cloud.firestore {
         && validBudgetShape(request.resource.data);
     }
 
+    
   
   }
 }

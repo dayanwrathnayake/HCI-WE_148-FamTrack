@@ -2,7 +2,6 @@ import {
   addDoc,
   collection,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   Timestamp,
@@ -57,7 +56,6 @@ export function subscribeToFamilyExpenses(
   const q = query(
     collection(db, "expenses"),
     where("familyId", "==", familyId),
-    orderBy("createdAt", "desc"),
   );
 
   return onSnapshot(
@@ -67,6 +65,13 @@ export function subscribeToFamilyExpenses(
         id: doc.id,
         ...(doc.data({ serverTimestamps: "estimate" }) as Expense),
       }));
+
+      expenses.sort((a, b) => {
+        const timeA = a.date?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
+        const timeB = b.date?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
+        return timeB - timeA;
+      });
+
       onUpdate(expenses);
     },
     (error) => {

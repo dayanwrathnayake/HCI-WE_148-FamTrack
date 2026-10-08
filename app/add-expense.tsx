@@ -31,13 +31,13 @@ export default function AddExpenseScreen() {
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryOption | null>(null);
 
-  const [selectedPayers, setSelectedPayers] = useState<MemberRecord[]>([]);
+  const [customPayers, setCustomPayers] = useState<MemberRecord[] | null>(null);
   const [splitMembers, setSplitMembers] = useState<MemberRecord[]>([]);
 
   const payers = useMemo(() => {
-    if (selectedPayers.length > 0) return selectedPayers;
+    if (customPayers !== null) return customPayers;
     return currentMember ? [currentMember] : [];
-  }, [selectedPayers, currentMember]);
+  }, [customPayers, currentMember]);
 
   const isValid =
     amount.trim().length > 0 &&
@@ -211,9 +211,9 @@ export default function AddExpenseScreen() {
             label="Payer"
             selectedMembers={payers}
             allMembers={activeMembers}
-            onAdd={(m) => setSelectedPayers((p) => [...p, m])}
+            onAdd={(m) => setCustomPayers([...payers, m])}
             onRemove={(id) =>
-              setSelectedPayers((p) => payers.filter((x) => x.id !== id))
+              setCustomPayers(payers.filter((x) => x.id !== id))
             }
           />
 
