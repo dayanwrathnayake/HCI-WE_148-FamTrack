@@ -129,7 +129,7 @@ export default function AddExpenseScreen() {
         receiptUri: receiptUri,
       });
 
-      handleBack();
+      router.replace("/expense-history");
     } catch (error: any) {
       Alert.alert(
         "Error",

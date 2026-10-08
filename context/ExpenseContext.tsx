@@ -133,7 +133,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         ? `Paid by ${member.displayName}`
         : "Paid by member";
 
-      const categoryConfig = CATEGORY_ICONS[exp.categoryId] ||
+      const rawCategory = (exp.categoryId || "Food").toLowerCase();
+      const capitalizedCategory =
+        rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1);
+
+      const categoryConfig = CATEGORY_ICONS[capitalizedCategory] ||
         CATEGORY_ICONS[exp.title] || {
           emoji: "💸",
           bg: "#10b981",
@@ -142,7 +146,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       const historyItem: HistoryItem = {
         id: exp.id,
         title: exp.title,
-        category: (exp.categoryId as any) || "Food",
+        category: capitalizedCategory as any,
         time: timeStr,
         payerText,
         amount: exp.amount,

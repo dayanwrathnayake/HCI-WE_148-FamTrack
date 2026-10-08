@@ -101,7 +101,8 @@ export default function ExpenseHistoryScreen() {
         ...group,
         items: group.items.filter((item) => {
           const matchesCategory =
-            selectedCategory === "All" || item.category === selectedCategory;
+            selectedCategory === "All" ||
+            item.category.toLowerCase() === selectedCategory.toLowerCase();
 
           const query = searchQuery.trim().toLowerCase();
           const matchesSearch =
