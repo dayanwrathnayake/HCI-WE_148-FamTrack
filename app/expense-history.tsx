@@ -10,20 +10,73 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppBottomNav } from "../components/AppBottomNav";
+import { ExpenseDetailModal } from "../components/ExpenseDetailModal";
 import { HistoryItemRow } from "../components/HistoryItemRow";
 import { Icon } from "../components/Icon";
 import {
   HISTORY_CATEGORIES,
   HistoryCategoryFilter,
+  HistoryItem,
 } from "../constants/history";
 import { useExpenses } from "../context/ExpenseContext";
 
 export default function ExpenseHistoryScreen() {
-  const { historyGroups, expenses, totalSpent, loading } = useExpenses();
+  const { historyGroups, expenses, totalSpent, loading, deleteExpense } =
+    useExpenses();
+
   const [selectedCategory, setSelectedCategory] =
     useState<HistoryCategoryFilter>("All");
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedExpense, setSelectedExpense] = useState<HistoryItem | null>(
+    null,
+  );
+
+  const { percentChange, isIncrease } = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
+    const lastYear = lastMonthDate.getFullYear();
+    const lastMonth = lastMonthDate.getMonth();
+
+    let thisMonthTotal = 0;
+    let lastMonthTotal = 0;
+
+    expenses.forEach((exp) => {
+      const d = exp.date?.toDate
+        ? exp.date.toDate()
+        : exp.createdAt?.toDate
+          ? exp.createdAt.toDate()
+          : null;
+      if (!d) return;
+
+      const y = d.getFullYear();
+      const m = d.getMonth();
+
+      if (y === currentYear && m === currentMonth) {
+        thisMonthTotal += exp.amount;
+      } else if (y === lastYear && m === lastMonth) {
+        lastMonthTotal += exp.amount;
+      }
+    });
+
+    if (lastMonthTotal === 0) {
+      return {
+        percentChange: thisMonthTotal > 0 ? "0.0" : "0.0",
+        isIncrease: true,
+      };
+    }
+
+    const diff = thisMonthTotal - lastMonthTotal;
+    const percentage = Math.abs((diff / lastMonthTotal) * 100).toFixed(1);
+
+    return {
+      percentChange: percentage,
+      isIncrease: diff >= 0,
+    };
+  }, [expenses]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -112,9 +165,15 @@ export default function ExpenseHistoryScreen() {
 
             <View className="items-end">
               <View className="flex-row items-center gap-1">
-                <Text className="text-red-400 text-[16px] font-bold">↑</Text>
+                <Text
+                  className={`text-[16px] font-bold ${
+                    isIncrease ? "text-red-300" : "text-emerald-200"
+                  }`}
+                >
+                  {isIncrease ? "↑" : "↓"}
+                </Text>
                 <Text className="text-white text-[18px] font-extrabold">
-                  8.4%
+                  {percentChange}%
                 </Text>
               </View>
               <Text className="text-white/80 text-[11px] font-medium mt-0.5">
@@ -201,7 +260,7 @@ export default function ExpenseHistoryScreen() {
             </View>
           ) : filteredGroups.length === 0 ? (
             <View className="bg-white rounded-[20px] p-8 items-center justify-center shadow-sm shadow-black/5">
-              <Text className="text-[24px] mb-1">💸</Text>
+              <Text className="text-[28px] mb-1">💸</Text>
               <Text className="text-[14px] font-semibold text-gray-700">
                 No expenses found
               </Text>
@@ -227,6 +286,7 @@ export default function ExpenseHistoryScreen() {
                       key={item.id}
                       item={item}
                       isLast={index === group.items.length - 1}
+                      onPress={(selected) => setSelectedExpense(selected)}
                     />
                   ))}
                 </View>
@@ -237,6 +297,16 @@ export default function ExpenseHistoryScreen() {
       </SafeAreaView>
 
       <AppBottomNav activeRouteName="home" />
+
+      <ExpenseDetailModal
+        visible={selectedExpense !== null}
+        item={selectedExpense}
+        onClose={() => setSelectedExpense(null)}
+        onDelete={async (item) => {
+          await deleteExpense(item.id);
+          setSelectedExpense(null);
+        }}
+      />
     </View>
   );
 }

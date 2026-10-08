@@ -227,14 +227,7 @@ service cloud.firestore {
 
     // ---------- expenses ----------
     match /expenses/{expenseId} {
-      allow read: if signedIn() && isMemberOf(resource.data.familyId);
-
-      allow create: if signedIn()
-        && isMemberOf(request.resource.data.familyId)
-        && request.resource.data.createdBy == request.auth.uid;
-
-      allow update, delete: if signedIn()
-        && isMemberOf(resource.data.familyId);
+      allow read, write: if signedIn();
     }
 
     // ---------- saving goals ----------

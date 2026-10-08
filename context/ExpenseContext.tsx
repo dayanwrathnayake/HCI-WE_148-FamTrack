@@ -16,6 +16,7 @@ import {
 import {
   createExpense,
   CreateExpenseInput,
+  deleteExpense as deleteExpenseService,
   subscribeToFamilyExpenses,
 } from "../services/expenseService";
 import type { Expense, WithId } from "../types/models";
@@ -28,6 +29,7 @@ type ExpenseContextType = {
   addExpense: (
     input: Omit<CreateExpenseInput, "familyId" | "createdBy">,
   ) => Promise<string>;
+  deleteExpense: (expenseId: string) => Promise<void>;
 };
 
 type ExpensesState = {
@@ -147,6 +149,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         status: exp.status || "Shared",
         iconBg: categoryConfig.bg,
         iconEmoji: categoryConfig.emoji,
+        receiptUri: exp.receiptUri || null,
+        note: exp.note || null,
       };
 
       if (!groupsMap.has(groupKey)) {
@@ -175,9 +179,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const deleteExpense = async (expenseId: string): Promise<void> => {
+    return deleteExpenseService(expenseId);
+  };
+
   return (
     <ExpenseContext.Provider
-      value={{ expenses, historyGroups, totalSpent, loading, addExpense }}
+      value={{
+        expenses,
+        historyGroups,
+        totalSpent,
+        loading,
+        addExpense,
+        deleteExpense,
+      }}
     >
       {children}
     </ExpenseContext.Provider>

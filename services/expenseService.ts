@@ -5,6 +5,8 @@ import {
   query,
   serverTimestamp,
   Timestamp,
+  deleteDoc,
+  doc,
   where,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -24,6 +26,10 @@ export type CreateExpenseInput = {
   note?: string;
   receiptUri?: string | null;
 };
+
+export async function deleteExpense(expenseId: string): Promise<void> {
+  await deleteDoc(doc(db, "expenses", expenseId));
+}
 
 export async function createExpense(
   input: CreateExpenseInput,

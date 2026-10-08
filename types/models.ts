@@ -88,6 +88,8 @@ export type Expense = {
   createdBy: string; // uid
   date: Timestamp;
   createdAt: Timestamp;
+  note?: string | null;
+  receiptUri?: string | null;
 };
 
 /** A document read back from Firestore, with its id attached. */
