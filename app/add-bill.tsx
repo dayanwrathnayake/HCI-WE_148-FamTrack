@@ -30,10 +30,11 @@ const BILL_CATEGORY_OPTIONS: BillCategoryOption[] = [
   { key: "Entertainment", emoji: "📺", label: "Entertainment", bg: "#fee2e2" },
   { key: "Utilities", emoji: "📶", label: "Broadband", bg: "#e0f2fe" },
   { key: "Utilities", emoji: "💧", label: "Water", bg: "#dbeafe" },
+  { key: "Utilities", emoji: "🛡️", label: "Insurance", bg: "#f1f5f9" },
 ];
 
 export default function AddBillScreen() {
-  const { family, activeMembers, currentMember } = useFamily();
+  const { family, activeMembers = [], currentMember } = useFamily();
   const { addBill } = useBills();
 
   const [billTitle, setBillTitle] = useState("");
@@ -42,15 +43,16 @@ export default function AddBillScreen() {
   const [isAutoPay, setIsAutoPay] = useState(false);
   const [selectedCategory, setSelectedCategory] =
     useState<BillCategoryOption | null>(null);
-  const [selectedAssignedMembers, setSelectedAssignedMembers] = useState<
-    MemberRecord[]
-  >([]);
+
+  const [customAssigned, setCustomAssigned] = useState<MemberRecord[] | null>(
+    null,
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const assignedMembers = useMemo(() => {
-    if (selectedAssignedMembers.length > 0) return selectedAssignedMembers;
+    if (customAssigned !== null) return customAssigned;
     return currentMember ? [currentMember] : [];
-  }, [selectedAssignedMembers, currentMember]);
+  }, [customAssigned, currentMember]);
 
   const isValid =
     billTitle.trim().length > 0 &&
@@ -110,7 +112,8 @@ export default function AddBillScreen() {
         amount: parsedAmount,
         dueDate: dueDate.trim() || "End of Month",
         isAutoPay: isAutoPay,
-        assignedMemberId: assignedMembers[0]?.id || null,
+        assignedMemberId:
+          assignedMembers.length > 0 ? assignedMembers[0].id : null,
         iconEmoji: selectedCategory.emoji,
         iconBg: selectedCategory.bg,
       });
@@ -155,7 +158,7 @@ export default function AddBillScreen() {
             Bill Name
           </Text>
           <TextInput
-            className="h-[48px] rounded-[14px] border border-[#e1e5ea] bg-white px-3.5 text-[15px] font-medium text-[#111827] outline-none"
+            className="h-[48px] rounded-[14px] border border-[#e1e5ea] bg-white px-3.5 text-[15px] font-medium text-[#111827]"
             value={billTitle}
             onChangeText={setBillTitle}
             placeholder="e.g. SLT Fiber / CEB Bill"
@@ -201,7 +204,7 @@ export default function AddBillScreen() {
                   RS
                 </Text>
                 <TextInput
-                  className="flex-1 text-[15px] font-medium text-[#1f2937] p-0 outline-none"
+                  className="flex-1 text-[15px] font-medium text-[#1f2937] p-0"
                   value={amount}
                   onChangeText={handleAmountChange}
                   keyboardType="numeric"
@@ -217,7 +220,7 @@ export default function AddBillScreen() {
               </Text>
               <View className="flex-row items-center h-[48px] rounded-[14px] border border-[#e1e5ea] bg-white px-3.5">
                 <TextInput
-                  className="flex-1 min-w-0 text-[13px] font-medium text-[#1f2937] p-0 outline-none"
+                  className="flex-1 min-w-0 text-[13px] font-medium text-[#1f2937] p-0"
                   value={dueDate}
                   onChangeText={handleDateChange}
                   placeholder="DD/MM/YYYY"
@@ -251,8 +254,8 @@ export default function AddBillScreen() {
             label="Assigned Member"
             selectedMembers={assignedMembers}
             allMembers={activeMembers}
-            onAdd={(m) => setSelectedAssignedMembers([m])}
-            onRemove={() => setSelectedAssignedMembers([])}
+            onAdd={(m) => setCustomAssigned([m])}
+            onRemove={() => setCustomAssigned([])}
           />
         </View>
 
@@ -268,8 +271,9 @@ export default function AddBillScreen() {
           </Pressable>
 
           <Pressable
-            className="flex-[1.4] h-[50px] rounded-full items-center justify-center flex-row gap-2"
+            className="flex-1 h-[50px] rounded-full items-center justify-center flex-row gap-2"
             style={{
+              flex: 1.4,
               backgroundColor: isValid && !submitting ? "#05bf78" : "#a0d9c0",
               shadowColor: isValid ? "#00c46a" : "transparent",
               shadowOffset: { width: 0, height: 4 },

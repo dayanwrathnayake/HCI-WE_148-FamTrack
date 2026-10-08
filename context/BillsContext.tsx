@@ -11,6 +11,7 @@ import { useFamily } from "./FamilyContext";
 import {
   createRecurringBill,
   CreateRecurringBillInput,
+  deleteRecurringBill,
   RecurringBillDoc,
   subscribeToFamilyBills,
   updateBillStatus,
@@ -28,6 +29,7 @@ type BillsContextType = {
     input: Omit<CreateRecurringBillInput, "familyId" | "createdBy">,
   ) => Promise<string>;
   markAsPaid: (billId: string, paidByText?: string) => Promise<void>;
+  deleteBill: (billId: string) => Promise<void>;
 };
 
 const BillsContext = createContext<BillsContextType | undefined>(undefined);
@@ -112,6 +114,10 @@ export function BillsProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const deleteBill = useCallback(async (billId: string): Promise<void> => {
+    await deleteRecurringBill(billId);
+  }, []);
+
   const contextValue = useMemo(
     () => ({
       bills,
@@ -121,6 +127,7 @@ export function BillsProvider({ children }: { children: React.ReactNode }) {
       loading,
       addBill,
       markAsPaid,
+      deleteBill,
     }),
     [
       bills,
@@ -130,6 +137,7 @@ export function BillsProvider({ children }: { children: React.ReactNode }) {
       loading,
       addBill,
       markAsPaid,
+      deleteBill,
     ],
   );
 

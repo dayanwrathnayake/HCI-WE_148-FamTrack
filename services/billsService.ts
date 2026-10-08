@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -63,6 +64,10 @@ export async function createRecurringBill(
 
   const docRef = await addDoc(collection(db, "recurringBills"), billData);
   return docRef.id;
+}
+
+export async function deleteRecurringBill(billId: string): Promise<void> {
+  await deleteDoc(doc(db, "recurringBills", billId));
 }
 
 export function subscribeToFamilyBills(
