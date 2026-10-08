@@ -59,7 +59,7 @@ export type AddExpenseValues = {
   note: string;
 };
 
-/** What an edit can change. The split, status and ownership of an expense are never edited. */
+/** What an edit can change. The status and ownership of an expense are never edited. */
 export type UpdateExpenseValues = {
   categoryId: ExpenseCategoryId;
   /** Raw text from the amount field, e.g. "20,000". */
@@ -69,6 +69,8 @@ export type UpdateExpenseValues = {
   /** memberId who paid. */
   paidBy: string;
   note: string;
+  /** The memberIds to split between. Leave undefined to keep the expense's current split. */
+  splitAmong?: string[];
 };
 
 type ExpenseContextValue = {
@@ -84,7 +86,7 @@ type ExpenseContextValue = {
   approveExpense: (expenseId: string) => Promise<void>;
   /** What the signed-in user may do with this expense (current month only). */
   getActions: (expense: ExpenseRecord) => ExpenseAction[];
-  /** Edits category, amount, payer, date and note. Throws ExpenseError. */
+  /** Edits category, amount, payer, date, note and (optionally) the split. Throws ExpenseError. */
   updateExpense: (expense: ExpenseRecord, values: UpdateExpenseValues) => Promise<void>;
   /** Deletes an expense: the admin declines/deletes, a member withdraws their own Pending one. */
   deleteExpense: (expense: ExpenseRecord) => Promise<void>;

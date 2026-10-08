@@ -55,10 +55,10 @@ expense, all require the document's month to be current.
   their month), so they are untouched; the month just has no budget until one is set again.
 * **Expense edit:** the admin may edit any current-month expense of the family; a member only their own Pending
   expense, and only while their own `canAddExpenses` is on. An edit may change only `categoryId`, `title`, `amount`,
-  `paidBy`, `note`, `date` and `monthKey`; the result must pass the same checks as creating (valid amount, date in the
-  current month and not in the future, payer an active member of the same family). `status`, `splitAmong`, `familyId`,
-  `createdBy`, `createdByMember` and `createdAt` are frozen; approval stays its own rule (admin, Pending to Shared,
-  `status` alone). Editing the split is deferred until there is a custom-split screen.
+  `paidBy`, `splitAmong`, `note`, `date` and `monthKey`; the result must pass the same checks as creating (valid amount,
+  1 to 20 people in the split, date in the current month and not in the future, payer an active member of the same
+  family). `status`, `familyId`, `createdBy`, `createdByMember` and `createdAt` are frozen; approval stays its own rule
+  (admin, Pending to Shared, `status` alone). "Not split" is stored as a split of just the payer.
 * **Expense delete:** the admin may delete any current-month expense of the family (a Pending one is a *decline*); a
   member only their own Pending expense (a *withdrawal*), which stays possible even if their `canAddExpenses` was
   switched off. A member can never touch a Shared expense or someone else's.

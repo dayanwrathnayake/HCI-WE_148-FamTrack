@@ -267,12 +267,14 @@ export type UpdateExpenseInput = ChangeExpenseContext & {
   /** memberId who paid. */
   paidBy: string;
   note: string;
+  /** The memberIds to split between (1 or more). Leave undefined to keep the expense's current split. */
+  splitAmong?: string[];
 };
 
 /**
- * Edits an expense's category, amount, payer, date and note. Its status, split and ownership fields
- * never change here (approval is its own action). The admin may edit any expense of the current month;
- * a member only their own Pending one. Throws ExpenseError with a message that is safe to show.
+ * Edits an expense's category, amount, payer, date, note and (optionally) split. Its status and ownership
+ * fields never change here (approval is its own action). The admin may edit any expense of the current
+ * month; a member only their own Pending one. Throws ExpenseError with a message that is safe to show.
  */
 export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
   if (!actionsFor(input).includes("edit")) {
@@ -300,6 +302,15 @@ export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
   const noteError = validateExpenseNote(note);
   if (noteError) throw new ExpenseError("invalid-note", noteError);
 
+  // Only a split that was provided is changed; it must be members of this family.
+  let splitAmong: string[] | undefined;
+  if (input.splitAmong !== undefined) {
+    splitAmong = [...new Set(input.splitAmong)];
+    if (splitAmong.length === 0 || splitAmong.some((id) => !input.activeMembers.some((member) => member.id === id))) {
+      throw new ExpenseError("invalid-split", "You can only split between members of your family.");
+    }
+  }
+
   const day = parsedDate.date;
   const monthKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}`;
 
@@ -310,6 +321,7 @@ export async function updateExpense(input: UpdateExpenseInput): Promise<void> {
       amount,
       paidBy: input.paidBy,
       note,
+      ...(splitAmong ? { splitAmong } : {}),
       date: Timestamp.fromDate(new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()))),
       monthKey,
     });

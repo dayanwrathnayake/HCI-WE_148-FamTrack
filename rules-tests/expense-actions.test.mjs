@@ -3,7 +3,7 @@
 //   - Admin: edit or delete any expense of the family (deleting a Pending one is a decline).
 //   - Member: edit or delete (withdraw) only their OWN expense while it is Pending; editing also needs
 //     their own canAddExpenses; never anything on a Shared expense or on someone else's.
-//   - An edit changes only category, title, amount, payer, note, date and monthKey. Status, the split,
+//   - An edit changes only category, title, amount, payer, split, note, date and monthKey. Status,
 //     familyId, createdBy, createdByMember and createdAt are frozen; approval stays its own rule.
 
 import { after, before, beforeEach, describe, it } from "node:test";
@@ -153,8 +153,16 @@ describe("edits are limited to the content fields", () => {
     await assertFails(edit(alice(), BOB_PENDING, { status: "Shared", amount: 5 }));
   });
 
-  it("the split cannot be changed in this phase", async () => {
-    await assertFails(edit(alice(), ALICE_SHARED, { splitAmong: ["alice"] }));
+  it("the split can be edited, but must still be 1 to 20 people", async () => {
+    await assertSucceeds(edit(alice(), ALICE_SHARED, { splitAmong: ["alice"] })); // not split
+    await assertSucceeds(edit(alice(), ALICE_SHARED, { splitAmong: ["alice", "bobMember"] }));
+    await assertFails(edit(alice(), ALICE_SHARED, { splitAmong: [] }));
+    await assertFails(edit(alice(), ALICE_SHARED, { splitAmong: Array.from({ length: 21 }, (_, i) => `m${i}`) }));
+    await assertFails(edit(alice(), ALICE_SHARED, { splitAmong: "alice" }));
+  });
+
+  it("the split is changed together with other fields in one edit", async () => {
+    await assertSucceeds(edit(alice(), ALICE_SHARED, { amount: 800, splitAmong: ["alice", "bobMember", "danaMember"] }));
   });
 
   it("ownership and creation fields are frozen", async () => {
@@ -239,9 +247,15 @@ describe("a member editing their own expense", () => {
     await assertFails(edit(bob(), BOB_PENDING, { createdBy: "alice", createdByMember: "alice" }));
   });
 
-  it("cannot change the frozen fields or the split", async () => {
+  it("can change the split of their own Pending expense, but not the frozen fields", async () => {
+    await assertSucceeds(edit(bob(), BOB_PENDING, { splitAmong: ["bobMember"] })); // not split
     await assertFails(edit(bob(), BOB_PENDING, { familyId: "family2" }));
-    await assertFails(edit(bob(), BOB_PENDING, { splitAmong: ["bobMember"] }));
+    await assertFails(edit(bob(), BOB_PENDING, { status: "Shared", splitAmong: ["bobMember"] }));
+  });
+
+  it("cannot change the split of a Shared expense or of someone else's", async () => {
+    await assertFails(edit(bob(), BOB_SHARED, { splitAmong: ["bobMember"] }));
+    await assertFails(edit(bob(), DANA_PENDING, { splitAmong: ["bobMember"] }));
   });
 
   it("cannot edit a previous month's Pending expense", async () => {

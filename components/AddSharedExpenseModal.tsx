@@ -8,8 +8,17 @@ import { useFamily } from "../context/FamilyContext";
 import { getExpenseErrorMessage } from "../services/expenseService";
 import { formatAmountInput, parseBudgetAmount } from "../utils/budget";
 import { formatExpenseDate, getEqualShare, getExpenseDay, type ExpenseRecord } from "../utils/expenses";
+import {
+  getSplitAmong,
+  getSplitPeople,
+  getSplitTitle,
+  splitChoiceFromExpense,
+  splitWithEveryone,
+  type SplitChoice,
+} from "../utils/expenseSplit";
 import { getAvatarPalette, getInitials } from "../utils/members";
 import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
+import { SplitChooser } from "./SplitChooser";
 
 type ExpenseTypeOption = {
   key: string;
@@ -30,7 +39,7 @@ const OTHER_TYPE_KEY = "other";
 type AddSharedExpenseModalProps = {
   visible: boolean;
   onClose: () => void;
-  /** When set, the modal edits this expense (category, amount, payer, date, note) instead of adding one. */
+  /** When set, the modal edits this expense (category, amount, payer, date, note, split) instead of adding one. */
   expense?: ExpenseRecord | null;
 };
 
@@ -61,6 +70,13 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
   const [editCategory, setEditCategory] = useState<ExpenseCategoryId>(() => expense?.categoryId ?? "other");
   const [dateText, setDateText] = useState(() => (expense ? formatExpenseDate(getExpenseDay(expense)) : ""));
   const [note, setNote] = useState(() => expense?.note ?? "");
+  // The split. null means the default, "everyone, equally", which follows the family as it loads. Once
+  // the chooser has been used it is that choice instead. Editing only sends the split if it was changed.
+  const [splitOverride, setSplitOverride] = useState<SplitChoice | null>(() =>
+    expense ? splitChoiceFromExpense(expense.splitAmong, activeMembers.map((member) => member.id)) : null,
+  );
+  const [splitChanged, setSplitChanged] = useState(false);
+  const [choosingSplit, setChoosingSplit] = useState(false);
 
   // Nobody chosen yet means the signed-in user.
   const paidBy = paidByChoice ?? currentMember?.id ?? null;
@@ -81,10 +97,12 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
   );
 
   const numericAmount = parseBudgetAmount(amount) ?? 0;
-  // Shared equally between everyone in the family. Each share is derived, never stored.
-  // (Editing keeps the expense's own split: it is not changed here.)
-  const splitMembersCount = isEdit ? expense.splitAmong.length : activeMembers.length;
-  const eachShare = getEqualShare(numericAmount, splitMembersCount);
+  // Equal shares between the people the expense is split between. Each share is derived, never stored.
+  const split = splitOverride ?? splitWithEveryone(activeMembers.map((member) => member.id));
+  const splitPeople = getSplitPeople(split);
+  const eachShare = getEqualShare(numericAmount, splitPeople);
+  const payerPick = payers.find((payer) => payer.key === paidBy);
+  const ownerText = !payerPick || payerPick.name === "You" ? "yours" : `${payerPick.name}'s`;
   const canSave = (isEdit || permission.allowed) && numericAmount > 0 && !saving;
 
   const resetForm = () => {
@@ -93,6 +111,9 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
     setPaidByChoice(null);
     setDateText("");
     setNote("");
+    setSplitOverride(null);
+    setSplitChanged(false);
+    setChoosingSplit(false);
     setErrorText(null);
   };
 
@@ -115,6 +136,8 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
           dateText,
           paidBy: paidBy ?? expense.paidBy,
           note,
+          // Only when the split was changed; otherwise the expense keeps the split it has.
+          splitAmong: splitChanged ? getSplitAmong(split, paidBy ?? expense.paidBy) : undefined,
         });
         resetForm();
         onClose();
@@ -140,7 +163,9 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
         amountText: amount,
         dateText: formatExpenseDate(new Date()),
         paidBy,
-        splitAmong: [], // everyone, equally
+        // [] means everyone, equally (the default); otherwise the chooser's members, or just the payer
+        // when splitting was turned off.
+        splitAmong: splitOverride ? getSplitAmong(splitOverride, paidBy ?? currentMember?.id ?? "") : [],
         note: "",
       });
       resetForm();
@@ -151,8 +176,12 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
       setSaving(false);
     }
   };
-  // TODO: build a real custom-split screen.
-  const handleChangeSplit = () => {};
+  const handleChangeSplit = () => setChoosingSplit(true);
+  const handleApplySplit = (choice: SplitChoice) => {
+    setSplitOverride(choice);
+    setSplitChanged(true);
+    setChoosingSplit(false);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
@@ -161,6 +190,16 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
         <View style={styles.sheet}>
           <View style={styles.dragHandle} />
 
+          {choosingSplit ? (
+            <SplitChooser
+              members={payers}
+              initial={split}
+              ownerText={ownerText}
+              onApply={handleApplySplit}
+              onCancel={() => setChoosingSplit(false)}
+            />
+          ) : (
+          <>
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
               <Text style={styles.title}>{isEdit ? "Edit shared expense" : "Add shared expense"}</Text>
@@ -281,16 +320,16 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
 
           <View style={styles.splitCard}>
             <View>
-              <Text style={styles.splitTitle}>Split equally · {splitMembersCount} members</Text>
+              <Text style={styles.splitTitle}>{getSplitTitle(split, activeMembers.length)}</Text>
               <Text style={styles.splitSubtitle}>
-                Rs {eachShare.toLocaleString("en-US", { maximumFractionDigits: 2 })} each
+                {split.enabled
+                  ? `Rs ${eachShare.toLocaleString("en-US", { maximumFractionDigits: 2 })} each`
+                  : `Whole amount is ${ownerText}`}
               </Text>
             </View>
-            {isEdit ? null : (
-              <Pressable onPress={handleChangeSplit} hitSlop={8}>
-                <Text style={styles.changeLink}>Change</Text>
-              </Pressable>
-            )}
+            <Pressable onPress={handleChangeSplit} hitSlop={8}>
+              <Text style={styles.changeLink}>Change</Text>
+            </Pressable>
           </View>
 
           {isEdit ? null : !permission.allowed ? (
@@ -312,6 +351,8 @@ export function AddSharedExpenseModal({ visible, onClose, expense = null }: AddS
               <Text style={styles.saveButtonText}>{isEdit ? "Save changes" : "Save expense"}</Text>
             </Pressable>
           </View>
+          </>
+          )}
         </View>
       </View>
     </Modal>

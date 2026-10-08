@@ -431,7 +431,7 @@ service cloud.firestore {
     //   - the admin approves a Pending expense (Pending -> Shared);
     //   - the admin edits or deletes any expense of the family (deleting a Pending one declines it);
     //   - a member edits or deletes (withdraws) only their OWN expense while it is still Pending.
-    // Ownership fields, status and the split are never changed by an edit.
+    // Ownership fields and status are never changed by an edit.
     match /expenses/{expenseId} {
       allow get, list: if isMemberOf(resource.data.familyId);
 
@@ -452,13 +452,14 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'Shared';
 
-      // Editing: only the content fields below can change (status, the split, familyId, createdBy,
-      // createdByMember and createdAt cannot), the result must be a valid expense dated in the
-      // current month, and the payer must be an active member of the same family.
+      // Editing: only the content fields below can change (status, familyId, createdBy, createdByMember
+      // and createdAt cannot), the result must be a valid expense (1 to 20 people in the split) dated in
+      // the current month, and the payer must be an active member of the same family. Rules cannot loop,
+      // so each id inside `splitAmong` is not checked against the members here (the app does that).
       allow update: if signedIn()
         && isCurrentMonthKey(resource.data.monthKey)
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['categoryId', 'title', 'amount', 'paidBy', 'note', 'date', 'monthKey'])
+             .hasOnly(['categoryId', 'title', 'amount', 'paidBy', 'splitAmong', 'note', 'date', 'monthKey'])
         && validExpenseShape(request.resource.data)
         && validExpenseDate(request.resource.data)
         && get(memberPath(resource.data.familyId, request.resource.data.paidBy)).data.status == 'active'
