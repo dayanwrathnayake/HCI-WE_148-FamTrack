@@ -25,10 +25,12 @@ function ProfileGlyph({ name, size = 19 }: { name: keyof typeof glyphs; size?: n
 type RowProps = { title: string; subtitle: string; icon: keyof typeof glyphs; background: string; onPress: () => void; badge?: string; last?: boolean };
 function ProfileRow({ title, subtitle, icon, background, onPress, badge, last }: RowProps) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => [styles.row, !last && styles.divider, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={!last && styles.divider}>
+      {({ pressed }) => <View style={[styles.row, pressed && styles.pressed]}>
       <View style={[styles.rowIcon, { backgroundColor: background }]}><ProfileGlyph name={icon} /></View>
       <View style={styles.rowText}><Text style={styles.rowTitle}>{title}</Text><Text style={styles.rowSubtitle}>{subtitle}</Text></View>
       {badge ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : <Text style={styles.chevron}>›</Text>}
+      </View>}
     </Pressable>
   );
 }
@@ -102,7 +104,7 @@ export default function ProfileScreen() {
             <ProfileRow title="Delete Account" subtitle="Remove your account" icon="trash" background="#fff0f0" last onPress={() => setDeleteVisible(true)} />
           </View>
         </View>
-        <Pressable accessibilityRole="button" disabled={loggingOut} accessibilityState={{ disabled: loggingOut, busy: loggingOut }} onPress={handleLogout} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><Text style={styles.logoutText}>{loggingOut ? "Logging out…" : "Log out"}</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={loggingOut} accessibilityState={{ disabled: loggingOut, busy: loggingOut }} onPress={handleLogout} style={styles.logout}><Text style={styles.logoutText}>{loggingOut ? "Logging out…" : "Log out"}</Text></Pressable>
         {!!logoutError && <Text accessibilityLiveRegion="polite" style={styles.logoutError}>{logoutError}</Text>}
       </ScrollView>
       <Modal visible={deleteVisible} transparent animationType="fade" onRequestClose={() => setDeleteVisible(false)}>
@@ -149,8 +151,8 @@ const styles = StyleSheet.create({
   menuCard: { borderRadius: 21, backgroundColor: "white", borderWidth: 1, borderColor: "#e4e4e4", paddingHorizontal: 13, paddingVertical: 3, shadowColor: "#000000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3, elevation: 3 },
   row: { flexDirection: "row", alignItems: "center", minHeight: 59, paddingVertical: 11, gap: 12 },
   divider: { borderBottomWidth: 0.7, borderBottomColor: "#f1f2f4" },
-  rowIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  rowText: { flex: 1 },
+  rowIcon: { width: 34, height: 34, flexShrink: 0, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  rowText: { flex: 1, minWidth: 0 },
   rowTitle: { fontSize: 13, fontWeight: "600", color: "#10131b" },
   rowSubtitle: { fontSize: 10, color: "#8b96a6", marginTop: 2 },
   chevron: { color: "#c4cbd5", fontSize: 16, paddingRight: 2 },
