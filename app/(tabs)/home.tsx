@@ -12,52 +12,33 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressBar";
+import { getExpenseCategory } from "../../constants/categories";
 import { useAuth } from "../../context/AuthContext";
-import type { IconName } from "../../constants/icons";
+import { useBudget } from "../../context/BudgetContext";
+import { useExpenses } from "../../context/ExpenseContext";
+import { useFamily } from "../../context/FamilyContext";
 import { useNotifications } from "../../context/NotificationContext";
+import { formatRs } from "../../utils/budget";
+import { getHomeBudgetSummary, getPillBackground, getTopSpendingCategories } from "../../utils/home";
 import { getFirstName } from "../../utils/names";
 
-const TOTAL_BALANCE = "Rs 60,000.00";
-const BUDGET_LEFT = "Rs 35,500.00";
-const BUDGET_SPENT_TEXT = "-Rs 24,500.00 spent this month";
-const BUDGET_PROGRESS = 24500 / 60000;
+// Total Balance means income minus expenses, so it needs the Income feature (another teammate's,
+// still mock data). Until that has a real backend it shows "Rs —" instead of a made-up amount.
+const TOTAL_BALANCE = "Rs —";
+const OVER_BUDGET_COLOR = "#ef4444";
 
 type CategoryPillData = {
-  icon: IconName;
+  emoji: string;
   background: string;
   name: string;
   spentText: string;
   spentColor: string;
 };
 
-const CATEGORY_PILLS: CategoryPillData[] = [
-  {
-    icon: "categoryEntertainment",
-    background: "rgba(102,255,163,0.1)",
-    name: "Entertainment",
-    spentText: "Rs 3,430 spent",
-    spentColor: "#1DA463",
-  },
-  {
-    icon: "categoryFood",
-    background: "rgba(255,148,102,0.1)",
-    name: "Food",
-    spentText: "Rs 430 spent",
-    spentColor: "#FF9466",
-  },
-  {
-    icon: "categoryBlue",
-    background: "rgba(61,185,255,0.1)",
-    name: "Entertainment",
-    spentText: "Rs 3,430 spent",
-    spentColor: "#3DB9FF",
-  },
-];
-
 function CategoryPill({ pill }: { pill: CategoryPillData }) {
   return (
     <View style={[styles.categoryPill, { backgroundColor: pill.background }]}>
-      <Icon name={pill.icon} size={24} />
+      <Text style={styles.categoryPillEmoji}>{pill.emoji}</Text>
       <View>
         <Text style={styles.categoryPillName}>{pill.name}</Text>
         <Text style={[styles.categoryPillAmount, { color: pill.spentColor }]}>
@@ -73,6 +54,36 @@ export default function HomeScreen() {
   const { unreadCount } = useNotifications();
   const { profile } = useAuth();
   const firstName = getFirstName(profile?.name);
+
+  // The budget card reads the same sources as Family Budget: this month's budget and the family's
+  // SHARED expenses (Pending ones are never in `totals`).
+  const { isAdmin } = useFamily();
+  const { status: budgetStatus, budget } = useBudget();
+  const { status: expenseStatus, totals } = useExpenses();
+  const summary = getHomeBudgetSummary({
+    budgetStatus,
+    expenseStatus,
+    budgetAmount: budget?.amount ?? null,
+    spent: totals.spent,
+  });
+  const topCategories = getTopSpendingCategories(totals.byCategory);
+  const pills: CategoryPillData[] = topCategories.map(({ id, amount }) => {
+    const category = getExpenseCategory(id);
+    return {
+      emoji: category.emoji,
+      background: getPillBackground(category.fillColor),
+      name: category.label,
+      spentText: `${formatRs(amount)} spent`,
+      spentColor: category.fillColor,
+    };
+  });
+  const showPills = summary.state === "ready" || summary.state === "no-budget";
+  const spentLine =
+    summary.state === "loading"
+      ? "Loading this month's spending…"
+      : summary.state === "error"
+        ? "Couldn't load this month's budget"
+        : `${summary.spent > 0 ? "-" : ""}${formatRs(summary.spent)} spent this month`;
 
   const handleFamilyBudgetPress = () => router.push("/(tabs)/budget");
   // TODO: Bills & Reminders belongs to another team member's module.
@@ -167,29 +178,56 @@ export default function HomeScreen() {
             <View style={styles.budgetContent}>
               <View style={styles.budgetTotalBlock}>
                 <View>
-                  <Text>
-                    <Text style={styles.budgetLeftAmount}>{BUDGET_LEFT} </Text>
-                    <Text style={styles.budgetLeftLabel}>left</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                    {summary.state === "no-budget" ? (
+                      <Text style={styles.budgetLeftAmount}>No budget set</Text>
+                    ) : (
+                      <>
+                        <Text style={styles.budgetLeftAmount}>
+                          {summary.state === "ready" ? formatRs(summary.left) : "Rs —"}{" "}
+                        </Text>
+                        <Text style={styles.budgetLeftLabel}>left</Text>
+                      </>
+                    )}
                   </Text>
                   <Text style={styles.budgetSpentText}>
-                    {BUDGET_SPENT_TEXT}
+                    {spentLine}
+                    {summary.over > 0 ? (
+                      <Text style={{ color: OVER_BUDGET_COLOR }}>
+                        {" "}
+                        · {formatRs(summary.over)} over budget
+                      </Text>
+                    ) : null}
                   </Text>
+                  {summary.state === "no-budget" ? (
+                    <Text style={styles.budgetSpentText}>
+                      {isAdmin
+                        ? "Tap All Budgets to set this month's budget"
+                        : "Your family admin hasn't set this month's budget yet"}
+                    </Text>
+                  ) : null}
                 </View>
                 <ProgressBar
-                  progress={BUDGET_PROGRESS}
+                  progress={summary.progress}
                   height={6}
                   trackColor="#EFEFFF"
-                  fillColor="#6a66ff"
+                  fillColor={summary.overBudget ? OVER_BUDGET_COLOR : "#6a66ff"}
                 />
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.categoryPillsRow}>
-                  {CATEGORY_PILLS.map((pill, index) => (
-                    <CategoryPill key={index} pill={pill} />
-                  ))}
-                </View>
-              </ScrollView>
+              {showPills ? (
+                pills.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.categoryPillsRow}>
+                      {pills.map((pill) => (
+                        <CategoryPill key={pill.name} pill={pill} />
+                      ))}
+                    </View>
+                  </ScrollView>
+                ) : (
+                  <Text style={styles.budgetSpentText}>No spending yet this month</Text>
+                )
+              ) : null}
             </View>
           </View>
         </View>
@@ -415,6 +453,11 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  categoryPillEmoji: {
+    width: 24,
+    fontSize: 20,
+    textAlign: "center",
   },
   categoryPillName: {
     fontSize: 13.5,

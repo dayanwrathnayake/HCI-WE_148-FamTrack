@@ -48,7 +48,7 @@ export function ReceiptPicker({
               Receipt Attached
             </Text>
             <Text className="text-[11px] text-[#15803d]">
-              Ready to save with expense
+              Not saved yet
             </Text>
           </View>
         </View>

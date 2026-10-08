@@ -53,13 +53,11 @@ export function sortMembers(members: MemberRecord[]): MemberRecord[] {
   );
 }
 
-/**
- * Subtitle under a member's name. Expense counts are placeholders (always 0) until the
- * expense phase provides real data.
- */
-export function getMemberSubtitle(member: MemberRecord, isCurrentUser: boolean): string {
+/** Subtitle under a member's name, with the number of shared expenses they paid this month. */
+export function getMemberSubtitle(member: MemberRecord, isCurrentUser: boolean, expenseCount = 0): string {
   if (isPendingMember(member)) return `${member.relationship} · Invitation pending`;
-  return isCurrentUser ? "0 expenses" : `${member.relationship} · 0 expenses`;
+  const expenses = `${expenseCount} ${expenseCount === 1 ? "expense" : "expenses"}`;
+  return isCurrentUser ? expenses : `${member.relationship} · ${expenses}`;
 }
 
 /** "October 2026" for the given date (device locale-independent, English month names). */

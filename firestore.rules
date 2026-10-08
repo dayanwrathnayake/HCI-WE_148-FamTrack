@@ -67,6 +67,13 @@ service cloud.firestore {
         && get(familyPath(familyId)).data.ownerId == request.auth.uid;
     }
 
+    function isFamilyAdmin(familyId) {
+      return isOwnerOf(familyId)
+        || (signedIn()
+            && exists(memberPath(familyId, request.auth.uid))
+            && get(memberPath(familyId, request.auth.uid)).data.role == 'admin');
+    }
+
     // Registration without an invitation: the new profile must point at a family
     // that is being created by this same user in the same batch.
     function startsOwnFamily(familyId) {
@@ -264,8 +271,6 @@ service cloud.firestore {
     match /families/{familyId} {
       allow get: if isMemberOf(familyId);
 
-      // Only as part of a user's first registration: the batch also creates users/{uid}
-      // pointing at this family.
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['name', 'ownerId', 'createdAt'])
         && request.resource.data.keys().hasAll(['name', 'ownerId', 'createdAt'])
@@ -275,7 +280,6 @@ service cloud.firestore {
         && !exists(userPath(request.auth.uid))
         && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
 
-      // Owner may rename the family. ownerId (and everything else) is immutable.
       allow update: if isOwnerOf(familyId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
         && isStr(request.resource.data.name, 1, 100);
@@ -301,7 +305,6 @@ service cloud.firestore {
         allow create: if signedIn()
           && validMemberShape(request.resource.data)
           && (
-            // (a) The family creator's own admin member, written at registration.
             (memberId == request.auth.uid
               && request.resource.data.userId == request.auth.uid
               && request.resource.data.role == 'admin'
@@ -312,7 +315,6 @@ service cloud.firestore {
               && !exists(userPath(request.auth.uid))
               && getAfter(familyPath(familyId)).data.ownerId == request.auth.uid)
             ||
-            // (b) The owner adds a pending member who has not registered yet.
             (isOwnerOf(familyId)
               && request.resource.data.userId == null
               && request.resource.data.role == 'member'
@@ -322,8 +324,6 @@ service cloud.firestore {
               && request.resource.data.joinedAt == null)
           );
 
-        // The invited person activating their pending member. Only userId, status and
-        // joinedAt may change; role, inviteEmail, displayName etc. are all frozen.
         allow update: if signedIn()
           && resource.data.status == 'pending'
           && resource.data.userId == null
@@ -344,7 +344,6 @@ service cloud.firestore {
 
     // ---------- family invitations ----------
     match /familyInvitations/{emailId} {
-      // The invited person (by email) and the owner of the inviting family.
       allow get: if signedIn()
         && (emailId == authEmail()
             || (resource != null && isOwnerOf(resource.data.familyId)));
