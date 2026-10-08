@@ -9,7 +9,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CategoryPicker } from "../components/CategoryPicker";
 import { Icon } from "../components/Icon";
 import { MemberSelector } from "../components/MemberSelector";
 import { ReceiptPicker } from "../components/ReceiptPicker";
@@ -112,8 +111,10 @@ export default function AddExpenseScreen() {
         paidBy: payers[0]?.key ?? null,
         splitAmong: splitMembers.map((member) => member.key),
         note,
+        receiptUri,
       });
-      handleBack();
+
+      router.replace("/expense-history");
     } catch (error) {
       setErrorText(getExpenseErrorMessage(error));
     } finally {

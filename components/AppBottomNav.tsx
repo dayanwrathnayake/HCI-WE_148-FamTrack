@@ -22,7 +22,6 @@ export function AppBottomNav({ activeRouteName }: AppBottomNavProps) {
   return (
     <BottomNavBar
       activeRouteName={activeRouteName}
-      onAddPress={() => router.push("/add-expense")}
       onNavigate={(routeName) => {
         const path = ROUTE_PATHS[routeName];
         if (path) router.replace(path);
@@ -31,3 +30,4 @@ export function AppBottomNav({ activeRouteName }: AppBottomNavProps) {
     />
   );
 }
+

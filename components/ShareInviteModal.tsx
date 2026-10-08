@@ -53,10 +53,11 @@ export function ShareInviteModal({
       if (result.action === Share.sharedAction) {
         onClose();
       }
-    } catch (error: any) {
+    } catch {
       await handleCopyCode();
       Alert.alert("Copied", "Share invite details copied to your clipboard!");
     }
+
   };
 
   return (

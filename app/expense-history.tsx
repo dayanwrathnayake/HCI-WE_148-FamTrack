@@ -322,9 +322,9 @@ export default function ExpenseHistoryScreen() {
           if (deleteExpense) {
             await deleteExpense(item.id);
           }
-          setSelectedExpense(null);
         }}
       />
+
     </View>
   );
 }

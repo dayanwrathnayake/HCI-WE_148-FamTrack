@@ -96,7 +96,9 @@ export type AddExpenseInput = {
   paidBy: string | null;
   splitAmong: string[];
   note: string;
+  receiptUri?: string | null;
 };
+
 
 // ====================================================================================
 // Subscriptions & Queries
@@ -188,8 +190,11 @@ export async function deleteExpense(expenseId: string): Promise<void> {
 export async function createExpense(
   input: CreateExpenseInput,
 ): Promise<string> {
+  const day = input.date;
+  const monthKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}`;
   const expenseData = {
     familyId: input.familyId,
+    monthKey,
     budgetId: input.budgetId || "default",
     categoryId: input.categoryId,
     title: input.title.trim(),
@@ -281,7 +286,9 @@ export async function addExpense(
     createdBy: input.uid,
     createdByMember: input.member.id,
     createdAt: serverTimestamp(),
+    receiptUri: input.receiptUri || null,
   };
+
 
   try {
     await setDoc(ref, data);

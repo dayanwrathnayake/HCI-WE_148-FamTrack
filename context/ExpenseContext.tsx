@@ -59,13 +59,6 @@ type ExpenseContextValue = {
   loadPreviousMonthSpent: () => Promise<number | null>;
 };
 
-type Loaded = {
-  key: string | null;
-  expenses: ExpenseRecord[];
-  state: "loading" | "ready" | "error";
-};
-
-const EMPTY: Loaded = { key: null, expenses: [], state: "loading" };
 const NO_EXPENSES: ExpenseRecord[] = [];
 
 function formatGroupDate(date: Date): string {
@@ -110,7 +103,15 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
   const familyId = uid ? (family?.id ?? null) : null;
   const key = uid && familyId ? `${uid}:${familyId}:${monthKey}` : null;
 
-  const [loaded, setLoaded] = useState<Loaded>(EMPTY);
+  const [synced, setSynced] = useState<{
+    key: string | null;
+    expenses: ExpenseRecord[];
+    state: "loading" | "ready" | "error";
+  }>({
+    key: null,
+    expenses: [],
+    state: "loading",
+  });
 
   useEffect(() => {
     if (!key || !familyId) {
@@ -118,22 +119,25 @@ export function ExpenseProvider({ children }: { children: ReactNode }) {
     }
 
     const unsubscribe = subscribeToExpenses(familyId, monthKey, (event) => {
-      setLoaded((prev) => {
-        if (prev.key !== key) return prev;
-        if (event.status === "ready")
-          return { key, expenses: event.expenses, state: "ready" };
+      if (event.status === "ready") {
+        setSynced({ key, expenses: event.expenses, state: "ready" });
+      } else {
         console.warn("[expenses] expense listener failed", event.error);
-        return { key, expenses: [], state: "error" };
-      });
+        setSynced({ key, expenses: [], state: "error" });
+      }
     });
 
     return unsubscribe;
   }, [key, familyId, monthKey]);
 
-  const current = loaded.key === key ? loaded : EMPTY;
-  const status: ExpenseStatusState = !key ? "idle" : current.state;
-  const expenses = key ? current.expenses : NO_EXPENSES;
-  const loading = status === "loading";
+  const isCurrent = Boolean(key && synced.key === key);
+  const status: ExpenseStatusState = !key
+    ? "idle"
+    : isCurrent
+      ? synced.state
+      : "loading";
+  const expenses = isCurrent ? synced.expenses : NO_EXPENSES;
+  const loading = !key || !isCurrent || status === "loading";
 
   const totals = useMemo(() => computeTotals(expenses), [expenses]);
   const totalSpent = totals.spent;

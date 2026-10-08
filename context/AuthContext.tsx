@@ -95,11 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!activeUid) {
-      setProfileState(IDLE_PROFILE);
       return;
     }
 
-    setProfileState({ uid: activeUid, profile: null, status: "loading" });
     return subscribeToUserProfile(activeUid, (event) => {
       if (event.status === "ready") {
         setProfileState({ uid: activeUid, profile: event.profile, status: "ready" });

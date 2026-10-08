@@ -1,6 +1,5 @@
 import "../global.css";
 import { Stack } from "expo-router";
-import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -13,7 +12,6 @@ import { SavingsProvider } from "../context/SavingsContext";
 import { AccountProvider } from "../context/AccountContext";
 import { IncomeProvider } from "../context/IncomeContext";
 import { NotificationProvider } from "../context/NotificationContext";
-import { markOnboardingCompleted } from "../services/onboardingService";
 
 function RootNavigator() {
   const { isSignedIn, initializing } = useAuth();
