@@ -8,12 +8,21 @@ rules_version = '2';
 // with. Anyone who registers with an invited email address, before the real owner does,
 // will be linked to that family. Requiring `request.auth.token.email_verified == true`
 // in authEmail-based checks would close this, at the cost of a verification step.
+// Mitigation: an invitation can only be claimed for 30 days (see invitationExpired).
+//
+// Other accepted limits (see docs/SECURITY.md): rules cannot loop, so each id in an expense's
+// `splitAmong` is not checked against the members; rules cannot count documents, so the number of
+// members, invitations and expenses per family is not capped.
 //
 // Model:
 //   users/{uid}                              - profile, created once at registration
 //   families/{familyId}                      - ownerId is the family's only admin for now
 //   families/{familyId}/members/{memberId}   - may exist before the person has an account
 //   familyInvitations/{lowercasedEmail}      - one pending invitation per email address
+//   budgets/{familyId}_{YYYY-MM}             - one budget per family per month (id is enforced);
+//                                              its `categories` map holds each category's % share
+//   expenses/{expenseId}                     - one expense: familyId + monthKey; a member's expense is
+//                                              Pending until the admin approves it (-> Shared)
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -64,11 +73,28 @@ service cloud.firestore {
       return getAfter(familyPath(familyId)).data.ownerId == request.auth.uid;
     }
 
-    // Registration with an invitation: a pending invitation for this user's email must
+    // An invitation can be claimed for 30 days after `createdAt` (when the current invitation was
+    // issued; renewing resets it). Invitations made before expiry existed have the same field.
+    function invitationExpired(invitation) {
+      return request.time >= invitation.createdAt + duration.value(30, 'd');
+    }
+
+    // The month of `startDate` is the current month. Time zones are covered by also accepting the
+    // month of the day before and the day after the server time (the same window expenses use).
+    function isCurrentMonthKey(monthKey) {
+      return monthKey in [
+        monthKeyOf(request.time - duration.value(1, 'd')),
+        monthKeyOf(request.time),
+        monthKeyOf(request.time + duration.value(1, 'd'))
+      ];
+    }
+
+    // Registration with an invitation: a pending, unexpired invitation for this user's email must
     // point at that family, and the same batch must activate the matching member for them.
     function joinsInvitedFamily(familyId) {
       let invitation = get(invitationPath(authEmail())).data;
       return invitation.status == 'pending'
+        && !invitationExpired(invitation)
         && invitation.familyId == familyId
         && getAfter(memberPath(familyId, invitation.memberId)).data.userId == request.auth.uid;
     }
@@ -89,9 +115,137 @@ service cloud.firestore {
         && data.canAddExpenses is bool;
     }
 
+    // A budget id is "<familyId>_<YYYY-MM>". Family ids are Firestore auto-ids, which never
+    // contain an underscore, so the part before it is always the family.
+    function budgetFamilyId(budgetId) {
+      return budgetId.split('_')[0];
+    }
+
+    // "2026-10" for a timestamp, in UTC. Budgets store the 1st of their month at 00:00:00 UTC.
+    function monthKeyOf(ts) {
+      return string(ts.year()) + '-' + (ts.month() < 10 ? '0' : '') + string(ts.month());
+    }
+
+    // One category's share, when present: a whole number from 1 to 100.
+    function validShare(categories, key) {
+      return !(key in categories)
+        || (categories[key] is int && categories[key] >= 1 && categories[key] <= 100);
+    }
+
+    // The per-category split of a budget: only canonical ids, each a whole 1-100, adding up to at
+    // most 100. "other" is NEVER stored; it is derived as 100 - the sum of these.
+    function validCategories(categories) {
+      return categories is map
+        && categories.keys().hasOnly([
+          'food', 'groceries', 'shopping', 'transport', 'bills', 'health', 'entertainment'
+        ])
+        && validShare(categories, 'food')
+        && validShare(categories, 'groceries')
+        && validShare(categories, 'shopping')
+        && validShare(categories, 'transport')
+        && validShare(categories, 'bills')
+        && validShare(categories, 'health')
+        && validShare(categories, 'entertainment')
+        && categories.get('food', 0) + categories.get('groceries', 0)
+           + categories.get('shopping', 0) + categories.get('transport', 0)
+           + categories.get('bills', 0) + categories.get('health', 0)
+           + categories.get('entertainment', 0) <= 100;
+    }
+
+    function validBudgetShape(data) {
+      return data.keys().hasOnly([
+          'familyId', 'name', 'amount', 'period', 'startDate',
+          'alertPercentage', 'membersCanAddExpenses', 'categories', 'createdBy'
+        ])
+        && data.keys().hasAll([
+          'familyId', 'name', 'amount', 'period', 'startDate',
+          'alertPercentage', 'membersCanAddExpenses', 'categories', 'createdBy'
+        ])
+        && data.familyId is string
+        && isStr(data.name, 1, 100)
+        && data.amount is int && data.amount >= 1 && data.amount <= 100000000
+        && data.period == 'monthly'
+        && data.startDate is timestamp
+        && data.alertPercentage is int && data.alertPercentage >= 1 && data.alertPercentage <= 100
+        && data.membersCanAddExpenses is bool
+        && validCategories(data.categories)
+        && data.createdBy is string;
+    }
+
+    function budgetPath(familyId, monthKey) {
+      return /databases/$(database)/documents/budgets/$(familyId + '_' + monthKey);
+    }
+
+    // An expense stores its date as the chosen day at 00:00:00 UTC, and `monthKey` must be that
+    // day's month. Dates cannot be in the future and must be in the current month (the checks use
+    // the day before, the day of and the day after the server time, so every time zone works).
+    function validExpenseDate(data) {
+      return data.date is timestamp
+        && data.monthKey is string
+        && data.monthKey == monthKeyOf(data.date)
+        && data.date.hours() == 0
+        && data.date.minutes() == 0
+        && data.date.seconds() == 0
+        && data.date.nanos() == 0
+        && data.date <= request.time + duration.value(1, 'd')
+        && isCurrentMonthKey(data.monthKey);
+    }
+
+    function validExpenseShape(data) {
+      return data.keys().hasOnly([
+          'familyId', 'monthKey', 'categoryId', 'title', 'amount', 'paidBy', 'splitAmong',
+          'status', 'note', 'date', 'createdBy', 'createdByMember', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'familyId', 'monthKey', 'categoryId', 'title', 'amount', 'paidBy', 'splitAmong',
+          'status', 'note', 'date', 'createdBy', 'createdByMember', 'createdAt'
+        ])
+        && data.familyId is string
+        && data.categoryId in [
+          'food', 'groceries', 'shopping', 'transport', 'bills', 'health', 'entertainment', 'other'
+        ]
+        && isStr(data.title, 1, 100)
+        && data.amount is int && data.amount >= 1 && data.amount <= 100000000
+        && isStr(data.paidBy, 1, 100)
+        && data.splitAmong is list && data.splitAmong.size() >= 1 && data.splitAmong.size() <= 20
+        && data.status in ['Shared', 'Pending']
+        && isStr(data.note, 0, 500)
+        && isStr(data.createdBy, 1, 128)
+        && isStr(data.createdByMember, 1, 100);
+    }
+
+    // Who may create an expense, read from the creator's OWN member document (createdByMember must
+    // belong to the signed-in user):
+    //   - the admin creates it as Shared;
+    //   - a member creates it as Pending, only if their own canAddExpenses is on and this month's
+    //     budget (when one exists) lets members add expenses.
+    function expenseCreatorAllowed(data) {
+      let creator = get(memberPath(data.familyId, data.createdByMember)).data;
+      return creator.userId == request.auth.uid
+        && creator.status == 'active'
+        && (
+          (creator.role == 'admin' && data.status == 'Shared')
+          ||
+          (creator.role == 'member'
+            && data.status == 'Pending'
+            && creator.canAddExpenses == true
+            && (!exists(budgetPath(data.familyId, data.monthKey))
+                || get(budgetPath(data.familyId, data.monthKey)).data.membersCanAddExpenses == true))
+        );
+    }
+
     // ---------- users ----------
     match /users/{uid} {
-      // Own profile only. No list, update or delete for now.
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'photoPath'])
+        && isStr(request.resource.data.name, 1, 100)
+        && (!('phone' in request.resource.data) || request.resource.data.phone == ''
+            || (request.resource.data.phone is string && request.resource.data.phone.matches('^[+]?[0-9]{7,15}$')))
+        && (!('photoPath' in request.resource.data)
+            || (request.resource.data.photoPath is string
+                && request.resource.data.photoPath.matches('^profilePhotos/' + uid + '/[^/]+$')));
+
+      // Own profile reads/edits only. Login email changes and deletion are server-only.
       allow get: if signedIn() && request.auth.uid == uid;
 
       allow create: if signedIn()
@@ -127,15 +281,21 @@ service cloud.firestore {
         && isStr(request.resource.data.name, 1, 100);
 
       match /members/{memberId} {
+        allow update: if isMemberOf(familyId)
+          && resource.data.userId == request.auth.uid && resource.data.status == 'active'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+          && request.resource.data.displayName == getAfter(userPath(request.auth.uid)).data.name;
+
         // A member of this family can list its roster. Nobody else can: not strangers,
         // and not members of other families (isMemberOf compares the caller's own
         // profile familyId with this path's familyId).
         allow list: if isMemberOf(familyId);
 
         // Family members can read a single member. A person can also read their own
-        // pending invite so registration can tell whether it is still valid.
+        // pending invite so registration can tell whether it is still valid. A member that does
+        // not exist is NOT readable by outsiders (the rule cannot be evaluated, so it is denied);
+        // registration treats that denial as "no valid invitation".
         allow get: if isMemberOf(familyId)
-          || resource == null
           || (resource.data.status == 'pending' && resource.data.inviteEmail == authEmail());
 
         allow create: if signedIn()
@@ -175,7 +335,10 @@ service cloud.firestore {
           && request.resource.data.joinedAt == request.time
           && get(invitationPath(authEmail())).data.familyId == familyId
           && get(invitationPath(authEmail())).data.memberId == memberId
+          && !invitationExpired(get(invitationPath(authEmail())).data)
           && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
+
+          allow delete: if signedIn();
       }
     }
 
@@ -203,14 +366,111 @@ service cloud.firestore {
         && getAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
              .data.inviteEmail == request.resource.data.email;
 
-      // The invited person accepting. Only `status` may change (pending -> accepted),
-      // so familyId, memberId, email, invitedBy and createdAt are all frozen.
+        allow delete: if signedIn();
+
+      // The invited person accepting, while the invitation has not expired. Only `status` may
+      // change (pending -> accepted), so familyId, memberId, email, invitedBy and createdAt are
+      // all frozen.
       allow update: if signedIn()
         && emailId == authEmail()
         && resource.data.status == 'pending'
+        && !invitationExpired(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         && request.resource.data.status == 'accepted'
         && getAfter(userPath(request.auth.uid)).data.familyId == resource.data.familyId;
+
+      // The family owner renewing an EXPIRED invitation for a member who is still pending (the
+      // admin invited the same email again). Only `createdAt` may change, to now, so the same
+      // familyId, memberId, email and status stay. Nothing here can delete or re-point it.
+      allow update: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && resource.data.status == 'pending'
+        && invitationExpired(resource.data)
+        && get(memberPath(resource.data.familyId, resource.data.memberId)).data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['createdAt'])
+        && request.resource.data.createdAt == request.time;
+    }
+
+    // ---------- budgets ----------
+    // One document per family per month, so earlier months are never overwritten and a family
+    // cannot have two budgets for the same month. No delete and no list (the client reads the
+    // current month's document by its id).
+    match /budgets/{budgetId} {
+      // Any member of the family, including for a month that has no budget yet.
+      allow get: if isMemberOf(budgetFamilyId(budgetId));
+
+      // Family owner (admin) only, and only for the current month. The id must be
+      // <familyId>_<YYYY-MM of startDate>, and startDate must be the 1st of that month at
+      // 00:00:00 UTC.
+      allow create: if signedIn()
+        && validBudgetShape(request.resource.data)
+        && isOwnerOf(request.resource.data.familyId)
+        && budgetId == request.resource.data.familyId + '_' + monthKeyOf(request.resource.data.startDate)
+        && isCurrentMonthKey(monthKeyOf(request.resource.data.startDate))
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.startDate.day() == 1
+        && request.resource.data.startDate.hours() == 0
+        && request.resource.data.startDate.minutes() == 0
+        && request.resource.data.startDate.seconds() == 0
+        && request.resource.data.startDate.nanos() == 0;
+
+      // Family owner (admin) only, and only the current month's budget: past months are history.
+      // familyId, createdBy, period and startDate are frozen. A budget saved before categories
+      // existed gains its `categories` map on its next save.
+      allow update: if signedIn()
+        && isOwnerOf(resource.data.familyId)
+        && isCurrentMonthKey(monthKeyOf(resource.data.startDate))
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['name', 'amount', 'alertPercentage', 'membersCanAddExpenses', 'categories'])
+        && validBudgetShape(request.resource.data);
+    }
+
+    // ---------- income ----------
+    function validIncome(data) {
+      return data.keys().hasAll(['familyId', 'createdBy', 'memberId', 'title', 'amountCents', 'source', 'date', 'monthKey', 'status', 'familyBudget', 'version', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['familyId', 'createdBy', 'memberId', 'title', 'amountCents', 'source', 'date', 'monthKey', 'status', 'familyBudget', 'version', 'createdAt', 'updatedAt'])
+        && data.familyId is string && data.createdBy is string && data.memberId is string
+        && isStr(data.title, 1, 100)
+        && data.amountCents is int && data.amountCents >= 1 && data.amountCents <= 10000000000
+        && data.source in ['Salary', 'Business', 'Rental', 'Interest', 'Other']
+        && data.status in ['Received', 'Expected'] && data.familyBudget is bool
+        && data.date is timestamp && data.date.year() >= 2000 && data.date.year() <= 2100
+        && data.date.hours() == 0 && data.date.minutes() == 0 && data.date.seconds() == 0 && data.date.nanos() == 0
+        && data.monthKey == monthKeyOf(data.date)
+        && data.version is int && data.version >= 1
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+    function incomeCreatorActive(data) {
+      return isMemberOf(data.familyId)
+        && get(memberPath(data.familyId, data.memberId)).data.userId == request.auth.uid
+        && get(memberPath(data.familyId, data.memberId)).data.status == 'active';
+    }
+    match /incomes/{incomeId} {
+      allow get: if signedIn() && (resource == null || isMemberOf(resource.data.familyId));
+      allow list: if isMemberOf(resource.data.familyId);
+      allow create: if signedIn() && validIncome(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid && incomeCreatorActive(request.resource.data)
+        && request.resource.data.version == 1 && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn() && resource.data.createdBy == request.auth.uid
+        && incomeCreatorActive(resource.data) && validIncome(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'amountCents', 'source', 'date', 'monthKey', 'status', 'familyBudget', 'version', 'updatedAt'])
+        && request.resource.data.version == resource.data.version + 1 && request.resource.data.updatedAt == request.time;
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid && incomeCreatorActive(resource.data);
+    }
+
+    // ---------- expenses ----------
+    match /expenses/{expenseId} {
+      allow read, write: if signedIn();
+    }
+
+    // ---------- saving goals ----------
+    match /savingGoals/{goalId} {
+      allow read, write: if signedIn();
+    }
+
+    // ---------- recurring bills ----------
+    match /recurringBills/{billId} {
+      allow read, write: if signedIn();
     }
   }
 }

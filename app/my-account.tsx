@@ -1,19 +1,31 @@
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
-import { AppBottomNav } from "../components/AppBottomNav";
+import { AccountAvatar } from "../components/AccountAvatar";
 import { Icon } from "../components/Icon";
-import { useAccount } from "../context/AccountContext";
+import { useAuth } from "../context/AuthContext";
+import { useFamily } from "../context/FamilyContext";
+import { accountErrorMessage, changeAccountEmail, saveAccountDetails } from "../services/accountService";
+import type { UserProfile, WithId } from "../types/models";
 
 export default function MyAccountScreen() {
-  const { account, updateAccount } = useAccount();
-  const [name, setName] = useState(account.name);
-  const [email, setEmail] = useState(account.email);
-  const [phone, setPhone] = useState(account.phone);
-  const [avatar, setAvatar] = useState(account.avatar);
+  const { profile, profileStatus, retryProfile } = useAuth();
+  const { currentMember, status: familyStatus } = useFamily();
+  if (profileStatus !== "ready" || !profile) return <SafeAreaView style={styles.screen}><View style={styles.unavailable}><Text style={styles.title}>My Account</Text>{profileStatus === "loading" || profileStatus === "idle" ? <ActivityIndicator color="#05bf78" /> : <><Text style={styles.message}>Could not load your account.</Text><Pressable accessibilityRole="button" onPress={retryProfile} style={styles.save}><Text>Retry</Text></Pressable></>}<Pressable accessibilityRole="button" onPress={() => router.replace("/(tabs)/settings")} style={styles.secondary}><Text>Back to Profile</Text></Pressable></View></SafeAreaView>;
+  return <AccountForm key={profile.id} profile={profile} memberId={currentMember?.id ?? null} familyReady={!profile.familyId || familyStatus === "ready"} />;
+}
+
+function AccountForm({ profile, memberId, familyReady }: { profile: WithId<UserProfile>; memberId: string | null; familyReady: boolean }) {
+  const [name, setName] = useState(profile.name);
+  const [email, setEmail] = useState(profile.email);
+  const [phone, setPhone] = useState(profile.phone ?? "");
+  const [photo, setPhoto] = useState<{ uri: string; mime?: string } | null>(null);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
   const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
   const [message, setMessage] = useState("");
 
@@ -21,46 +33,58 @@ export default function MyAccountScreen() {
     setMessage("");
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-      if (!result.canceled && result.assets[0]) setAvatar({ uri: result.assets[0].uri });
+      if (!result.canceled && result.assets[0]) setPhoto({ uri: result.assets[0].uri, mime: result.assets[0].mimeType });
     } catch {
       setMessage("Could not open your photos. Please try again.");
     }
   };
 
-  const save = () => {
+  const save = async () => {
+    if (busy) return;
     const nextErrors: typeof errors = {};
     if (!name.trim()) nextErrors.name = "Enter your name.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = "Enter a valid email address.";
-    if (!/^\+?\d{7,15}$/.test(phone.replace(/[\s()-]/g, ""))) nextErrors.phone = "Enter a valid phone number.";
+    if (!/^[^\s@]+@gmail\.com$/.test(email.trim().toLowerCase())) nextErrors.email = "Enter an email ending in @gmail.com.";
+    if (phone.trim() && !/^\+?\d{7,15}$/.test(phone.replace(/[\s()-]/g, ""))) nextErrors.phone = "Enter a valid phone number.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) { setMessage(""); return; }
-    updateAccount({ name: name.trim(), email: email.trim(), phone: phone.trim(), avatar });
-    router.replace({ pathname: "/(tabs)/settings", params: { accountUpdated: String(Date.now()) } });
+    if (!familyReady || (profile.familyId && !memberId)) { setMessage("Wait for your family membership to load before saving."); return; }
+    const emailChanged = email.trim().toLowerCase() !== profile.email.toLowerCase();
+    if (emailChanged && !password) { setMessage("Enter your current password to change your email."); return; }
+    setBusy(true);
+    setMessage("");
+    let emailSaved = false;
+    try {
+      if (emailChanged) { await changeAccountEmail(email, password); emailSaved = true; setPassword(""); }
+      await saveAccountDetails(profile, memberId, { name, phone, photoUri: photo?.uri, photoMime: photo?.mime });
+      router.replace({ pathname: "/(tabs)/settings", params: { accountUpdated: String(Date.now()) } });
+    } catch (error) { setMessage((emailSaved ? "Email changed, but other details could not be saved. " : "") + accountErrorMessage(error)); }
+    finally { setBusy(false); }
   };
 
   return (
     <View style={styles.screen}>
       <SafeAreaView style={styles.screen} edges={["top"]}>
         <View style={styles.header}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back to Profile" hitSlop={10} style={styles.back} onPress={() => router.replace("/(tabs)/settings")}><Icon name="arrowLeft" size={19} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back to Profile" disabled={busy} hitSlop={10} style={styles.back} onPress={() => router.replace("/(tabs)/settings")}><Icon name="arrowLeft" size={19} /></Pressable>
           <Text style={styles.title}>My Account</Text>
         </View>
         <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
             <View style={styles.card}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Change profile photo" style={styles.photoButton} onPress={pickPhoto}>
-                <View style={styles.photoFrame}><Image source={avatar} style={styles.photo} resizeMode="cover" accessibilityLabel="Profile photo" /></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Change profile photo" disabled={busy} style={styles.photoButton} onPress={pickPhoto}>
+                <AccountAvatar name={name} photoPath={profile.photoPath} previewUri={photo?.uri} size={100} />
                 <View style={styles.cameraBadge}><SvgXml width={19} height={19} xml={'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 5h8l2 3h3v13H3V8h3z" fill="#050505"/><circle cx="12" cy="14" r="4" fill="white"/><circle cx="12" cy="14" r="2.5" fill="#050505"/></svg>'} /></View>
               </Pressable>
               <View style={styles.fields}>
-                <View style={[styles.field, !!errors.name && styles.invalid]}><Text style={styles.label}>Name</Text><TextInput accessibilityLabel="Name" value={name} onChangeText={value => { setName(value); setMessage(""); }} style={styles.input} autoCapitalize="words" autoComplete="name" maxLength={100} /></View>
+                <View style={[styles.field, !!errors.name && styles.invalid]}><Text style={styles.label}>Name</Text><TextInput editable={!busy} accessibilityLabel="Name" value={name} onChangeText={value => { setName(value); setMessage(""); }} style={styles.input} autoCapitalize="words" autoComplete="name" maxLength={100} /></View>
                 {errors.name && <Text style={styles.error}>{errors.name}</Text>}
-                <View style={[styles.field, !!errors.email && styles.invalid]}><Text style={styles.label}>Email</Text><TextInput accessibilityLabel="Email" value={email} onChangeText={value => { setEmail(value); setMessage(""); }} style={styles.input} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} /></View>
+                <View style={[styles.field, !!errors.email && styles.invalid]}><Text style={styles.label}>Email</Text><TextInput editable={!busy} accessibilityLabel="Email" value={email} onChangeText={value => { setEmail(value); setMessage(""); }} style={styles.input} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} /></View>
                 {errors.email && <Text style={styles.error}>{errors.email}</Text>}
-                <View style={[styles.field, !!errors.phone && styles.invalid]}><Text style={styles.label}>Phone Number</Text><TextInput accessibilityLabel="Phone Number" value={phone} onChangeText={value => { setPhone(value); setMessage(""); }} style={styles.input} keyboardType="phone-pad" autoComplete="tel" maxLength={25} /></View>
+                {email.trim().toLowerCase() !== profile.email.toLowerCase() && <><View style={styles.field}><Text style={styles.label}>Current password</Text><TextInput editable={!busy} accessibilityLabel="Current password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoCorrect={false} style={styles.input} /></View></>}
+                <View style={[styles.field, !!errors.phone && styles.invalid]}><Text style={styles.label}>Phone Number (optional)</Text><TextInput editable={!busy} accessibilityLabel="Phone Number" value={phone} onChangeText={value => { setPhone(value); setMessage(""); }} style={styles.input} keyboardType="phone-pad" autoComplete="tel" maxLength={25} /></View>
                 {errors.phone && <Text style={styles.error}>{errors.phone}</Text>}
               </View>
-              <Pressable accessibilityRole="button" onPress={save} style={({ pressed }) => [styles.save, pressed && styles.pressed]}><Text style={styles.saveText}>Save</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy, busy }} onPress={save} style={({ pressed }) => [styles.save, (pressed || busy) && styles.pressed]}>{busy ? <ActivityIndicator color="#062a1e" /> : <Text style={styles.saveText}>Save</Text>}</Pressable>
               {!!message && <Text accessibilityLiveRegion="polite" style={styles.message}>{message}</Text>}
             </View>
           </ScrollView>
@@ -72,6 +96,7 @@ export default function MyAccountScreen() {
 }
 
 const styles = StyleSheet.create({
+  unavailable: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 15 }, secondary: { minHeight: 44, alignItems: "center", justifyContent: "center" }, secondaryText: { color: "#078653", fontSize: 13, fontWeight: "600" },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   header: { height: 58, justifyContent: "center", alignItems: "center", paddingHorizontal: 22 },
   back: { position: "absolute", left: 22, height: 30, width: 30, borderRadius: 15, backgroundColor: "#10182a", justifyContent: "center", alignItems: "center" },

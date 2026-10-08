@@ -52,6 +52,7 @@ type FamilyContextValue = {
   isAdmin: boolean;
   /** Creates a pending member + invitation atomically. Throws InviteError. */
   inviteMember: (input: InviteMemberInput) => Promise<{ memberId: string }>;
+  retryFamily: () => void;
 };
 
 type Loaded = {
@@ -81,6 +82,8 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   const key = uid && familyId ? `${uid}:${familyId}` : null;
 
   const [loaded, setLoaded] = useState<Loaded>(EMPTY);
+  const [familyAttempt, setFamilyAttempt] = useState(0);
+  const retryFamily = useCallback(() => setFamilyAttempt(attempt => attempt + 1), []);
 
   useEffect(() => {
     if (!key || !familyId) {
@@ -113,7 +116,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       unsubscribeFamily();
       unsubscribeMembers();
     };
-  }, [key, familyId]);
+  }, [key, familyId, familyAttempt]);
 
   // Only data that belongs to the CURRENT user+family is exposed, so a previous account's
   // family can never appear, not even for one render while switching accounts.
@@ -165,8 +168,9 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
       currentMember,
       isAdmin,
       inviteMember,
+      retryFamily,
     }),
-    [status, current.family, members, activeMembers, pendingMembers, currentMember, isAdmin, inviteMember],
+    [status, current.family, members, activeMembers, pendingMembers, currentMember, isAdmin, inviteMember, retryFamily],
   );
 
   return <FamilyContext.Provider value={value}>{children}</FamilyContext.Provider>;

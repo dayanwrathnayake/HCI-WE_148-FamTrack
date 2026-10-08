@@ -10,7 +10,6 @@ import { BillsProvider } from "../context/BillsContext";
 import { ExpenseProvider } from "../context/ExpenseContext";
 import { FamilyProvider } from "../context/FamilyContext";
 import { SavingsProvider } from "../context/SavingsContext";
-import { AccountProvider } from "../context/AccountContext";
 import { IncomeProvider } from "../context/IncomeContext";
 import { NotificationProvider } from "../context/NotificationContext";
 import { markOnboardingCompleted } from "../services/onboardingService";
@@ -73,23 +72,29 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <FamilyProvider>
-          <NotificationProvider>
-          <AccountProvider>
-          <IncomeProvider>
-          <ExpenseProvider>
-            <SavingsProvider>
-              <BillsProvider>
-                <RootNavigator />
-              </BillsProvider>
-            </SavingsProvider>
-          </ExpenseProvider>
-          </IncomeProvider>
-          </AccountProvider>
-          </NotificationProvider>
-        </FamilyProvider>
+        <UserProviders />
       </AuthProvider>
     </SafeAreaProvider>
+  );
+}
+
+// Unmount session data whenever the Firebase account changes, including logout.
+function UserProviders() {
+  const { user } = useAuth();
+  return (
+    <FamilyProvider key={user?.uid ?? "signed-out"}>
+      <NotificationProvider>
+          <IncomeProvider>
+            <ExpenseProvider>
+              <SavingsProvider>
+                <BillsProvider>
+                  <RootNavigator />
+                </BillsProvider>
+              </SavingsProvider>
+            </ExpenseProvider>
+          </IncomeProvider>
+      </NotificationProvider>
+    </FamilyProvider>
   );
 }
 
