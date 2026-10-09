@@ -30,12 +30,20 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (.env.example stays tracked)
+.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
 
 # generated native folders
 /ios
 /android
+
+# Firebase emulator logs
+*-debug.log
