@@ -5,6 +5,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.26",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.19",
     "expo-image-picker": "~57.0.20",
     "expo-linear-gradient": "~57.0.2",
@@ -24,9 +25,11 @@
     "react-native-worklets": "^0.10.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "firebase-tools": "^15.32.1",
     "tailwindcss": "^3.4.19",
     "typescript": "~6.0.3"
   },
@@ -35,7 +38,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "emulators": "npx --yes firebase-tools@15.33.0 emulators:start --project demo-famtrack --only auth,firestore,storage,functions",
+    "test:firebase": "npx --yes firebase-tools@15.33.0 emulators:exec --project demo-famtrack --only auth,firestore,storage,functions \"node --test --test-concurrency=1 tests/firebase/auth-flow.test.mjs tests/firebase/auth-rules.test.mjs tests/firebase/income.test.mjs\"",
+    "test:rules": "node scripts/run-rules-tests.cjs"
   },
   "private": true
 }

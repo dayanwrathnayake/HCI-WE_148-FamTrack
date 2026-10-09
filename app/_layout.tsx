@@ -1,27 +1,19 @@
 import "../global.css";
-
-import { Stack, useSegments } from "expo-router";
-import { useEffect } from "react";
+import { Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { BillsProvider } from "../context/BillsContext";
+import { BudgetProvider } from "../context/BudgetContext";
 import { ExpenseProvider } from "../context/ExpenseContext";
 import { FamilyProvider } from "../context/FamilyContext";
 import { SavingsProvider } from "../context/SavingsContext";
-import { markOnboardingCompleted } from "../services/onboardingService";
+import { IncomeProvider } from "../context/IncomeContext";
+import { NotificationProvider } from "../context/NotificationContext";
 
 function RootNavigator() {
   const { isSignedIn, initializing } = useAuth();
-  const firstSegment: string | undefined = useSegments()[0];
-
-  // Reaching Login or Register means onboarding is finished (or was skipped).
-  useEffect(() => {
-    if (firstSegment === "login" || firstSegment === "register") {
-      void markOnboardingCompleted();
-    }
-  }, [firstSegment]);
 
   return (
     <View style={styles.root}>
@@ -52,6 +44,11 @@ function RootNavigator() {
           <Stack.Screen name="create-goal" />
           <Stack.Screen name="recurring-bills" />
           <Stack.Screen name="add-bill" />
+          <Stack.Screen name="my-account" />
+          <Stack.Screen name="income" />
+          <Stack.Screen name="add-income" />
+          <Stack.Screen name="reports" />
+          <Stack.Screen name="notifications" />
         </Stack.Protected>
       </Stack>
 
@@ -65,17 +62,30 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <FamilyProvider>
-          <ExpenseProvider>
-            <SavingsProvider>
-              <BillsProvider>
-                <RootNavigator />
-              </BillsProvider>
-            </SavingsProvider>
-          </ExpenseProvider>
-        </FamilyProvider>
+        <UserProviders />
       </AuthProvider>
     </SafeAreaProvider>
+  );
+}
+
+function UserProviders() {
+  const { user } = useAuth();
+  return (
+    <FamilyProvider key={user?.uid ?? "signed-out"}>
+      <NotificationProvider>
+        <IncomeProvider>
+          <BudgetProvider>
+            <ExpenseProvider>
+              <SavingsProvider>
+                <BillsProvider>
+                  <RootNavigator />
+                </BillsProvider>
+              </SavingsProvider>
+            </ExpenseProvider>
+          </BudgetProvider>
+        </IncomeProvider>
+      </NotificationProvider>
+    </FamilyProvider>
   );
 }
 

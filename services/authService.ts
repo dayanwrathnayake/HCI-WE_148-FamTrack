@@ -9,6 +9,7 @@ import {
 } from "firebase/auth";
 
 import { auth } from "../lib/firebase";
+import { MIN_PASSWORD_LENGTH } from "../utils/validation";
 
 // Firebase Auth only. Anything that touches Firestore (user profile, family,
 // invitations) lives in its own service so the registration flow can compose them.
@@ -47,7 +48,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "An account with this email already exists.",
   "auth/invalid-email": "Please enter a valid email address.",
   "auth/missing-email": "Please enter your email address.",
-  "auth/weak-password": "Password must be at least 6 characters.",
+  "auth/weak-password": `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
   "auth/missing-password": "Please enter your password.",
   "auth/invalid-credential": "Incorrect email or password.",
   "auth/user-not-found": "Incorrect email or password.",

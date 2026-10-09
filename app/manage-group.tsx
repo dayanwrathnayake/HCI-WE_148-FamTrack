@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   Switch,
@@ -16,25 +16,22 @@ import { GroupAdminCard } from "../components/GroupAdminCard";
 import { Icon } from "../components/Icon";
 import { InviteMemberModal } from "../components/InviteMemberModal";
 import { MemberControlRow } from "../components/MemberControlRow";
+import { MemberInitialsAvatar } from "../components/MemberInitialsAvatar";
 import { ShareInviteModal } from "../components/ShareInviteModal";
-import {
-  GroupMemberControl,
-  INITIAL_ADMIN,
-  INITIAL_GROUP_MEMBERS,
-} from "../constants/group";
+import { useFamily } from "../context/FamilyContext";
+import { getInviteErrorMessage } from "../services/familyService";
+import { getAvatarPalette, getInitials, MemberRecord } from "../utils/members";
 
 export default function ManageGroupScreen() {
-  const [members, setMembers] = useState<GroupMemberControl[]>(
-    INITIAL_GROUP_MEMBERS,
-  );
+  const { family, members, isAdmin, inviteMember, removeMember, status } =
+    useFamily();
 
   const [autoSync, setAutoSync] = useState(true);
   const [inviteViaQr, setInviteViaQr] = useState(true);
 
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
-
   const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
-  const [editingMember, setEditingMember] = useState<GroupMemberControl | null>(
+  const [selectedMember, setSelectedMember] = useState<MemberRecord | null>(
     null,
   );
 
@@ -46,66 +43,43 @@ export default function ManageGroupScreen() {
     }
   };
 
-  const handleInviteMember = (data: {
+  const handleInvite = async (data: {
     name: string;
-    role: string;
+    relationship: any;
     email: string;
     isFullAccess: boolean;
   }) => {
-    const avatarList = [
-      require("../assets/onboarding/avatar2.png"),
-      require("../assets/onboarding/avatar3.png"),
-      require("../assets/onboarding/avatar4.png"),
-    ];
-
-    const added: GroupMemberControl = {
-      id: `mem_${Date.now()}`,
-      name: data.name.trim(),
-      roleDescription: data.role.trim() || "Member",
-      accessType: data.isFullAccess ? "FULL ACCESS" : "LIMITED",
-      limitText: data.isFullAccess ? undefined : "LIMIT: RS 15,000/MO",
-      spentPercentage: 0.1,
-      avatar: avatarList[members.length % avatarList.length],
-      email:
-        data.email.trim() ||
-        `${data.name.trim().toLowerCase().replace(/\s+/g, "")}@gmail.com`,
-    };
-
-    setMembers((prev) => [...prev, added]);
-    setIsInviteModalVisible(false);
-    Alert.alert("Success", `${added.name} has been invited to the group!`);
-  };
-
-  const handleUpdateMember = (updated: GroupMemberControl) => {
-    setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-    Alert.alert("Updated", `${updated.name}'s settings have been updated.`);
-  };
-
-  const handleRemoveMember = (id: string) => {
-    const target = members.find((m) => m.id === id);
-    setMembers((prev) => prev.filter((m) => m.id !== id));
-    if (target) {
+    try {
+      await inviteMember({
+        name: data.name,
+        relationship: data.relationship,
+        contact: data.email,
+        canAddExpenses: data.isFullAccess,
+      });
+      setIsInviteModalVisible(false);
       Alert.alert(
-        "Removed",
-        `${target.name} was removed from the family group.`,
+        "Invitation Sent",
+        `An invitation has been created for ${data.name} (${data.email})!`,
       );
+    } catch (error: any) {
+      Alert.alert("Invite Error", getInviteErrorMessage(error));
     }
   };
 
   const handleDeleteGroup = () => {
     Alert.alert(
       "Delete Family Group",
-      "Are you sure you want to delete this family group? All shared budgets and member permissions will be reset.",
+      "Are you sure you want to delete this family group? All shared budgets and members will be removed.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete Group",
           style: "destructive",
           onPress: () => {
-            setMembers([]);
-            Alert.alert("Group Deleted", "Family group has been removed.", [
-              { text: "OK", onPress: () => handleBack() },
-            ]);
+            Alert.alert(
+              "Info",
+              "Only the family creator can delete the family workspace.",
+            );
           },
         },
       ],
@@ -133,7 +107,7 @@ export default function ManageGroupScreen() {
 
         <ScrollView
           className="flex-1 bg-[#f8fafc]"
-          contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 20 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: 50, gap: 20 }}
           showsVerticalScrollIndicator={false}
         >
           <GroupAdminCard />
@@ -141,53 +115,60 @@ export default function ManageGroupScreen() {
           <View className="gap-3">
             <View className="flex-row items-center justify-between">
               <Text className="text-[14px] font-bold text-[#111827]">
-                Family Members ({members.length + 1})
+                Family Members ({members.length})
               </Text>
 
-              <Pressable
-                onPress={() => setIsInviteModalVisible(true)}
-                hitSlop={6}
-              >
-                <Text className="text-[13px] font-bold text-[#05bf78]">
-                  + Invite
-                </Text>
-              </Pressable>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 16 }}
-              className="py-1"
-            >
-              <View className="items-center gap-1.5">
-                <Image
-                  source={INITIAL_ADMIN.avatar}
-                  style={{ width: 48, height: 48, borderRadius: 24 }}
-                  resizeMode="cover"
-                />
-                <Text className="text-[12px] font-semibold text-[#111827]">
-                  Kamal
-                </Text>
-              </View>
-
-              {members.map((m) => (
+              {isAdmin && (
                 <Pressable
-                  key={m.id}
-                  onPress={() => setEditingMember(m)}
-                  className="items-center gap-1.5 active:opacity-80"
+                  onPress={() => setIsInviteModalVisible(true)}
+                  hitSlop={6}
                 >
-                  <Image
-                    source={m.avatar}
-                    style={{ width: 48, height: 48, borderRadius: 24 }}
-                    resizeMode="cover"
-                  />
-                  <Text className="text-[12px] font-semibold text-[#111827]">
-                    {m.name}
+                  <Text className="text-[13px] font-bold text-[#05bf78]">
+                    + Invite
                   </Text>
                 </Pressable>
-              ))}
-            </ScrollView>
+              )}
+            </View>
+
+            {status === "loading" ? (
+              <View className="py-4 items-center">
+                <ActivityIndicator size="small" color="#05bf78" />
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 16, paddingHorizontal: 2 }}
+                className="py-1"
+              >
+                {members.map((m) => {
+                  const palette = getAvatarPalette(m.id);
+                  const initials = getInitials(m.displayName);
+
+                  return (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => setSelectedMember(m)}
+                      className="items-center gap-1.5"
+                      style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
+                    >
+                      <MemberInitialsAvatar
+                        initials={initials}
+                        backgroundColor={palette.background}
+                        textColor={palette.text}
+                        size={48}
+                      />
+                      <Text
+                        className="text-[12px] font-semibold text-[#111827] max-w-[64px]"
+                        numberOfLines={1}
+                      >
+                        {m.displayName.split(" ")[0]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
 
           <View className="gap-2.5">
@@ -203,7 +184,7 @@ export default function ManageGroupScreen() {
               </View>
             ) : (
               <View
-                className="bg-white rounded-[22px] p-4 shadow-sm shadow-black/5 elevation-1 gap-4"
+                className="bg-white rounded-[22px] px-4 py-2 shadow-sm shadow-black/5 elevation-1"
                 style={{ borderWidth: 1, borderColor: "#f1f5f9" }}
               >
                 {members.map((m, index) => (
@@ -211,7 +192,7 @@ export default function ManageGroupScreen() {
                     key={m.id}
                     member={m}
                     isLast={index === members.length - 1}
-                    onPress={() => setEditingMember(m)}
+                    onPress={() => setSelectedMember(m)}
                   />
                 ))}
               </View>
@@ -269,22 +250,25 @@ export default function ManageGroupScreen() {
             </View>
           </View>
 
-          <Pressable
-            onPress={handleDeleteGroup}
-            className="h-[50px] rounded-full items-center justify-center active:opacity-90 mt-2"
-            style={{
-              backgroundColor: "#ff6b6b",
-              shadowColor: "#ff6b6b",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.25,
-              shadowRadius: 6,
-              elevation: 3,
-            }}
-          >
-            <Text className="text-white text-[15px] font-bold">
-              Delete Family Group
-            </Text>
-          </Pressable>
+          {isAdmin && (
+            <Pressable
+              onPress={handleDeleteGroup}
+              className="h-[50px] rounded-full items-center justify-center mt-2"
+              style={({ pressed }) => ({
+                backgroundColor: "#ff6b6b",
+                shadowColor: "#ff6b6b",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.25,
+                shadowRadius: 6,
+                elevation: 3,
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text className="text-white text-[15px] font-bold">
+                Delete Family Group
+              </Text>
+            </Pressable>
+          )}
         </ScrollView>
       </SafeAreaView>
 
@@ -293,20 +277,31 @@ export default function ManageGroupScreen() {
       <InviteMemberModal
         visible={isInviteModalVisible}
         onClose={() => setIsInviteModalVisible(false)}
-        onInvite={handleInviteMember}
+        onInvite={handleInvite}
       />
 
       <EditMemberModal
-        visible={editingMember !== null}
-        member={editingMember}
-        onClose={() => setEditingMember(null)}
-        onSave={handleUpdateMember}
-        onRemove={handleRemoveMember}
+        visible={selectedMember !== null}
+        member={selectedMember}
+        isAdmin={isAdmin}
+        onClose={() => setSelectedMember(null)}
+        onRemove={async (member) => {
+          await removeMember(member.id, member.inviteEmail);
+          setSelectedMember(null);
+          Alert.alert(
+            "Success",
+            member.status === "pending"
+              ? `Invitation for ${member.displayName} has been cancelled.`
+              : `${member.displayName} has been removed from the family.`,
+          );
+        }}
       />
 
       <ShareInviteModal
         visible={isShareModalVisible}
         onClose={() => setIsShareModalVisible(false)}
+        groupName={family?.name || "Family Group"}
+        inviteCode={family?.id || "FAM-TRACK-2026"}
       />
     </View>
   );

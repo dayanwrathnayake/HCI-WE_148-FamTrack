@@ -1,33 +1,30 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import type { ExpenseCategoryId } from "../types/models";
+import { useExpenses } from "../context/ExpenseContext";
+import { useFamily } from "../context/FamilyContext";
+import { getExpenseErrorMessage } from "../services/expenseService";
+import { formatAmountInput, parseBudgetAmount } from "../utils/budget";
+import { formatExpenseDate, getEqualShare } from "../utils/expenses";
+import { getAvatarPalette, getInitials } from "../utils/members";
 import { MemberInitialsAvatar } from "./MemberInitialsAvatar";
 
 type ExpenseTypeOption = {
   key: string;
   emoji: string;
   label: string;
+  /** The canonical category this type is saved as. */
+  categoryId: ExpenseCategoryId;
 };
 
+// Electricity is a bill; "+ Other" saves as the Other category.
 const EXPENSE_TYPES: ExpenseTypeOption[] = [
-  { key: "groceries", emoji: "🛒", label: "Groceries" },
-  { key: "electricity", emoji: "💡", label: "Electricity" },
-  { key: "transport", emoji: "🚗", label: "Transport" },
+  { key: "groceries", emoji: "🛒", label: "Groceries", categoryId: "groceries" },
+  { key: "electricity", emoji: "💡", label: "Electricity", categoryId: "bills" },
+  { key: "transport", emoji: "🚗", label: "Transport", categoryId: "transport" },
 ];
-
-type PayerOption = {
-  key: string;
-  initials: string;
-  avatarColor: string;
-  avatarTextColor: string;
-  name: string;
-};
-
-const PAYERS: PayerOption[] = [
-  { key: "mum", initials: "MU", avatarColor: "#ffcfe0", avatarTextColor: "#8c2453", name: "Mum" },
-  { key: "dad", initials: "DA", avatarColor: "#cde3ff", avatarTextColor: "#1b4c88", name: "Dad" },
-  { key: "you", initials: "YO", avatarColor: "#ffd8a8", avatarTextColor: "#7a4b00", name: "You" },
-];
+const OTHER_TYPE_KEY = "other";
 
 type AddSharedExpenseModalProps = {
   visible: boolean;
@@ -35,23 +32,86 @@ type AddSharedExpenseModalProps = {
 };
 
 export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModalProps) {
-  const [amount, setAmount] = useState("20,000");
+  const { activeMembers, currentMember } = useFamily();
+  const { addExpense, permission } = useExpenses();
+
+  const [amount, setAmount] = useState("");
   const [expenseType, setExpenseType] = useState("groceries");
-  const [paidBy, setPaidBy] = useState("dad");
+  const [paidByChoice, setPaidByChoice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
 
-  const numericAmount = Number(amount.replace(/,/g, "")) || 0;
-  const splitMembersCount = 3;
-  const eachShare = numericAmount / splitMembersCount;
+  // Nobody chosen yet means the signed-in user.
+  const paidBy = paidByChoice ?? currentMember?.id ?? null;
 
-  // TODO: wire up once there's a real shared-expense data source to save to.
-  const handleSaveExpense = () => onClose();
+  const payers = useMemo(
+    () =>
+      activeMembers.map((member) => {
+        const palette = getAvatarPalette(member.id);
+        return {
+          key: member.id,
+          initials: getInitials(member.displayName),
+          avatarColor: palette.background,
+          avatarTextColor: palette.text,
+          name: member.id === currentMember?.id ? "You" : member.displayName,
+        };
+      }),
+    [activeMembers, currentMember],
+  );
+
+  const numericAmount = parseBudgetAmount(amount) ?? 0;
+  // Shared equally between everyone in the family. Each share is derived, never stored.
+  const splitMembersCount = activeMembers.length;
+  const eachShare = getEqualShare(numericAmount, splitMembersCount);
+  const canSave = permission.allowed && numericAmount > 0 && !saving;
+
+  const resetForm = () => {
+    setAmount("");
+    setExpenseType("groceries");
+    setPaidByChoice(null);
+    setErrorText(null);
+  };
+
+  const handleClose = () => {
+    if (saving) return;
+    resetForm();
+    onClose();
+  };
+
+  const handleSaveExpense = async () => {
+    if (!canSave) return;
+    const categoryId: ExpenseCategoryId =
+      expenseType === OTHER_TYPE_KEY
+        ? "other"
+        : (EXPENSE_TYPES.find((type) => type.key === expenseType)?.categoryId ?? "other");
+
+    setErrorText(null);
+    setSaving(true);
+    try {
+      // Everything goes through the ONE expense backend (ExpenseContext -> expenseService).
+      await addExpense({
+        categoryId,
+        amountText: amount,
+        dateText: formatExpenseDate(new Date()),
+        paidBy,
+        splitAmong: [], // everyone, equally
+        note: "",
+      });
+      resetForm();
+      onClose();
+    } catch (error) {
+      setErrorText(getExpenseErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
   // TODO: build a real custom-split screen.
   const handleChangeSplit = () => {};
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={styles.overlay}>
-        <Pressable style={styles.overlayDismiss} onPress={onClose} />
+        <Pressable style={styles.overlayDismiss} onPress={handleClose} />
         <View style={styles.sheet}>
           <View style={styles.dragHandle} />
 
@@ -60,7 +120,7 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
               <Text style={styles.title}>Add shared expense</Text>
               <Text style={styles.subtitle}>Counts against the family budget</Text>
             </View>
-            <Pressable onPress={onClose} style={styles.closeButton} hitSlop={8}>
+            <Pressable onPress={handleClose} style={styles.closeButton} hitSlop={8}>
               <Text style={styles.closeButtonText}>✕</Text>
             </Pressable>
           </View>
@@ -71,8 +131,10 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
             <TextInput
               style={styles.amountInput}
               value={amount}
-              onChangeText={setAmount}
-              keyboardType="numeric"
+              onChangeText={(text) => setAmount(formatAmountInput(text))}
+              placeholder="0"
+              placeholderTextColor="#a9b1bb"
+              keyboardType="number-pad"
             />
           </View>
 
@@ -92,19 +154,24 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
                 </Pressable>
               );
             })}
-            <Pressable style={styles.addTypePill}>
-              <Text style={styles.addTypeText}>+ Other</Text>
+            <Pressable
+              onPress={() => setExpenseType(OTHER_TYPE_KEY)}
+              style={expenseType === OTHER_TYPE_KEY ? [styles.typePill, styles.typePillActive] : styles.addTypePill}
+            >
+              <Text style={expenseType === OTHER_TYPE_KEY ? [styles.typePillText, styles.typePillTextActive] : styles.addTypeText}>
+                + Other
+              </Text>
             </Pressable>
           </View>
 
           <Text style={styles.fieldLabel}>PAID BY</Text>
           <View style={styles.payerRow}>
-            {PAYERS.map((payer) => {
+            {payers.map((payer) => {
               const active = paidBy === payer.key;
               return (
                 <Pressable
                   key={payer.key}
-                  onPress={() => setPaidBy(payer.key)}
+                  onPress={() => setPaidByChoice(payer.key)}
                   style={[styles.payerChip, active && styles.payerChipActive]}
                 >
                   <MemberInitialsAvatar
@@ -133,11 +200,22 @@ export function AddSharedExpenseModal({ visible, onClose }: AddSharedExpenseModa
             </Pressable>
           </View>
 
+          {!permission.allowed ? (
+            <Text style={styles.errorText}>{permission.reason}</Text>
+          ) : permission.pending ? (
+            <Text style={styles.noteText}>Your expense will be sent to the family admin for approval.</Text>
+          ) : null}
+          {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
+
           <View style={styles.actionsRow}>
-            <Pressable onPress={onClose} style={styles.cancelButton}>
+            <Pressable onPress={handleClose} style={styles.cancelButton}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </Pressable>
-            <Pressable onPress={handleSaveExpense} style={styles.saveButton}>
+            <Pressable
+              onPress={handleSaveExpense}
+              disabled={!canSave}
+              style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
+            >
               <Text style={styles.saveButtonText}>Save expense</Text>
             </Pressable>
           </View>
@@ -283,10 +361,25 @@ const styles = StyleSheet.create({
   },
   payerRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
+  },
+  noteText: {
+    marginTop: 12,
+    fontSize: 12,
+    color: "#8a93a0",
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 12,
+    color: "#c2410c",
+  },
+  saveButtonDisabled: {
+    opacity: 0.45,
   },
   payerChip: {
     flex: 1,
+    minWidth: 96,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,

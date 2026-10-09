@@ -22,6 +22,19 @@ export const CATEGORIES: CategoryOption[] = [
   { key: "other", emoji: "📦", label: "Other" },
 ];
 
+/**
+ * Something MemberSelector can show. The mock `Member` above (Bills and Savings still use it)
+ * has a picture; real family members have initials instead.
+ */
+export type SelectableMember = {
+  key: string;
+  name: string;
+  avatar?: ImageSourcePropType;
+  initials?: string;
+  avatarColor?: string;
+  avatarTextColor?: string;
+};
+
 export const ALL_MEMBERS: Member[] = [
   {
     key: "amali",
