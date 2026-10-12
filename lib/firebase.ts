@@ -1,11 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, getReactNativePersistence, initializeAuth, type Auth } from "firebase/auth";
+import { browserLocalPersistence, connectAuthEmulator, getAuth, getReactNativePersistence, initializeAuth, type Auth } from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
   memoryEagerGarbageCollector,
   memoryLocalCache,
+  connectFirestoreEmulator,
 } from "firebase/firestore";
 
 // Expo only inlines EXPO_PUBLIC_* variables that are read as `process.env.NAME`,
@@ -18,6 +22,9 @@ const firebaseConfig = {
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
+const useEmulators = __DEV__ && process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATORS === "true";
+const emulatorHost = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || "127.0.0.1";
+if (useEmulators) firebaseConfig.projectId = "demo-famtrack";
 
 const missingKeys = Object.entries(firebaseConfig)
   .filter(([, value]) => !value)
@@ -37,7 +44,7 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 function createAuth(): Auth {
   try {
     return initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
+      persistence: Platform.OS === "web" ? browserLocalPersistence : getReactNativePersistence(AsyncStorage),
     });
   } catch {
     return getAuth(app);
@@ -62,3 +69,14 @@ function createDb() {
 }
 
 export const db = createDb();
+export const storage = getStorage(app, useEmulators ? "gs://demo-famtrack.appspot.com" : undefined);
+export const functions = getFunctions(app);
+// Persist this marker across Fast Refresh; emulator connectors must run once, before requests.
+const emulatorState = globalThis as typeof globalThis & { famtrackEmulatorsConnected?: boolean };
+if (useEmulators && !emulatorState.famtrackEmulatorsConnected) {
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectStorageEmulator(storage, emulatorHost, 9199);
+  connectFunctionsEmulator(functions, emulatorHost, 15001);
+  emulatorState.famtrackEmulatorsConnected = true;
+}

@@ -29,6 +29,8 @@ export type UserProfile = {
   email: string; // stored lowercased
   familyId: string | null;
   createdAt: Timestamp;
+  phone?: string;
+  photoPath?: string;
 };
 
 /** families/{familyId} */
@@ -105,7 +107,9 @@ export type Expense = {
   createdBy: string; // uid
   createdByMember: string; // memberId of the creator
   createdAt: Timestamp;
+  receiptUri?: string | null;
 };
+
 
 /** A document read back from Firestore, with its id attached. */
 export type WithId<T> = T & { id: string };

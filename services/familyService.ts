@@ -9,7 +9,13 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../lib/firebase";
-import type { Family, FamilyInvitation, FamilyMember, Relationship, WithId } from "../types/models";
+import type {
+  Family,
+  FamilyInvitation,
+  FamilyMember,
+  Relationship,
+  WithId,
+} from "../types/models";
 import { isInvitationExpired } from "../utils/invitations";
 import { validateInviteContact, validateMemberName } from "../utils/validation";
 
@@ -37,7 +43,10 @@ export type MembersEvent =
   | { status: "error"; error: unknown };
 
 /** Live listener on families/{familyId}. Returns the unsubscribe function. */
-export function subscribeToFamily(familyId: string, onEvent: (e: FamilyEvent) => void): () => void {
+export function subscribeToFamily(
+  familyId: string,
+  onEvent: (e: FamilyEvent) => void,
+): () => void {
   return onSnapshot(
     doc(db, "families", familyId),
     { includeMetadataChanges: true },
@@ -55,11 +64,32 @@ export function subscribeToFamily(familyId: string, onEvent: (e: FamilyEvent) =>
 }
 
 /**
+ * Deletes a member or cancels a pending invitation
+ */
+export async function removeFamilyMember(
+  familyId: string,
+  memberId: string,
+  email?: string | null,
+): Promise<void> {
+  const batch = writeBatch(db);
+  const memberRef = doc(db, "families", familyId, "members", memberId);
+  batch.delete(memberRef);
+  if (email) {
+    const inviteRef = doc(db, "familyInvitations", normalizeInviteEmail(email));
+    batch.delete(inviteRef);
+  }
+  await batch.commit();
+}
+
+/**
  * Live listener on the family's members. Returns the unsubscribe function.
  * A family always has at least its admin, so an EMPTY answer served from the local cache
  * is "not loaded yet" and is not reported.
  */
-export function subscribeToMembers(familyId: string, onEvent: (e: MembersEvent) => void): () => void {
+export function subscribeToMembers(
+  familyId: string,
+  onEvent: (e: MembersEvent) => void,
+): () => void {
   return onSnapshot(
     collection(db, "families", familyId, "members"),
     { includeMetadataChanges: true },
@@ -117,7 +147,8 @@ export type InviteInput = {
   canAddExpenses: boolean;
 };
 
-export const normalizeInviteEmail = (value: string) => value.trim().toLowerCase();
+export const normalizeInviteEmail = (value: string) =>
+  value.trim().toLowerCase();
 
 /**
  * Creates a pending member AND its invitation in ONE atomic batch: either both exist or
@@ -128,7 +159,10 @@ export async function inviteFamilyMember(
   input: InviteInput,
 ): Promise<{ memberId: string; renewed: boolean }> {
   if (!input.isAdmin) {
-    throw new InviteError("not-admin", "Only the family admin can invite members.");
+    throw new InviteError(
+      "not-admin",
+      "Only the family admin can invite members.",
+    );
   }
 
   const nameError = validateMemberName(input.name);
@@ -138,30 +172,39 @@ export async function inviteFamilyMember(
   if (contactError) throw new InviteError("invalid-email", contactError);
 
   const email = normalizeInviteEmail(input.contact);
-  if (input.invitedByEmail && email === normalizeInviteEmail(input.invitedByEmail)) {
+  if (
+    input.invitedByEmail &&
+    email === normalizeInviteEmail(input.invitedByEmail)
+  ) {
     throw new InviteError("own-email", "That's your own email address.");
   }
-  const alreadyInvited = input.existingMembers.find((m) => m.inviteEmail === email);
+
+  const alreadyInvited = input.existingMembers.find(
+    (m) => m.inviteEmail === email,
+  );
   if (alreadyInvited) {
-    // Inviting the same person again after their invitation expired renews it in place (same
-    // member, same invitation document) instead of creating a duplicate.
-    if (alreadyInvited.status === "pending" && (await renewExpiredInvitation(input.familyId, email, alreadyInvited.id))) {
+    if (
+      alreadyInvited.status === "pending" &&
+      (await renewExpiredInvitation(input.familyId, email, alreadyInvited.id))
+    ) {
       return { memberId: alreadyInvited.id, renewed: true };
     }
-    throw new InviteError("already-in-family", "That email has already been invited to your family.");
+    throw new InviteError(
+      "already-in-family",
+      "That email has already been invited to your family.",
+    );
   }
 
-  // The rules let the family admin read an invitation of THEIR family, so an existing one
-  // shows up here. (An invitation from another family, or no invitation at all, both come
-  // back as permission-denied; the batch below then decides.)
   try {
     const existing = await getDoc(doc(db, "familyInvitations", email));
     if (existing.exists()) {
-      throw new InviteError("already-invited", "That email already has an invitation.");
+      throw new InviteError(
+        "already-invited",
+        "That email already has an invitation.",
+      );
     }
   } catch (error) {
     if (error instanceof InviteError) throw error;
-    // permission-denied / offline: fall through to the atomic write.
   }
 
   const memberRef = doc(collection(db, "families", input.familyId, "members"));
@@ -198,7 +241,10 @@ export async function inviteFamilyMember(
         "That email can't be invited. It may already have an invitation, or only the family admin can invite members.",
       );
     }
-    throw new InviteError("unknown", "Couldn't send the invitation. Check your connection and try again.");
+    throw new InviteError(
+      "unknown",
+      "Couldn't send the invitation. Check your connection and try again.",
+    );
   }
 
   return { memberId: memberRef.id, renewed: false };
@@ -206,10 +252,12 @@ export async function inviteFamilyMember(
 
 /**
  * Restarts the 30 days of an EXPIRED, still-pending invitation of this family for this member.
- * Only `createdAt` changes (the rules freeze everything else). Returns false when there is nothing
- * to renew (no invitation, not pending, not expired, or it belongs to another member).
  */
-async function renewExpiredInvitation(familyId: string, email: string, memberId: string): Promise<boolean> {
+async function renewExpiredInvitation(
+  familyId: string,
+  email: string,
+  memberId: string,
+): Promise<boolean> {
   const ref = doc(db, "familyInvitations", email);
   let invitation: FamilyInvitation;
   try {
@@ -236,9 +284,15 @@ async function renewExpiredInvitation(familyId: string, email: string, memberId:
         ? String((error as { code: unknown }).code)
         : "";
     if (code === "permission-denied") {
-      throw new InviteError("rejected", "That invitation can't be renewed right now.");
+      throw new InviteError(
+        "rejected",
+        "That invitation can't be renewed right now.",
+      );
     }
-    throw new InviteError("unknown", "Couldn't renew the invitation. Check your connection and try again.");
+    throw new InviteError(
+      "unknown",
+      "Couldn't renew the invitation. Check your connection and try again.",
+    );
   }
   return true;
 }

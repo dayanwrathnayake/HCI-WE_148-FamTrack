@@ -48,9 +48,13 @@ export function parseExpenseDate(text: string, now: Date = new Date()): ParsedEx
 }
 
 /** The stored `date` as a Date at LOCAL midnight of the same calendar day. */
-export function getExpenseDay(expense: { date: { toDate: () => Date } }): Date {
-  const utc = expense.date.toDate();
-  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+export function getExpenseDay(expense: { date?: any; createdAt?: any }): Date {
+  const dateObj =
+    expense?.date?.toDate?.() ||
+    (expense?.date instanceof Date ? expense.date : null) ||
+    expense?.createdAt?.toDate?.() ||
+    new Date();
+  return new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
 }
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -65,15 +69,25 @@ export function getDayLabel(day: Date, now: Date = new Date()): string {
 }
 
 /** "6:42 PM" from the time the expense was added. */
-export function getExpenseTime(expense: { createdAt: { toDate: () => Date } | null }): string {
-  if (!expense.createdAt) return "";
-  return expense.createdAt.toDate().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+export function getExpenseTime(expense: { createdAt?: any; date?: any }): string {
+  const dateObj =
+    expense?.createdAt?.toDate?.() ||
+    expense?.date?.toDate?.() ||
+    (expense?.date instanceof Date ? expense.date : null);
+  if (!dateObj) return "";
+  return dateObj.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 /** Newest day first, then most recently added. */
 export function sortExpenses(expenses: ExpenseRecord[]): ExpenseRecord[] {
-  const added = (e: ExpenseRecord) => (e.createdAt ? e.createdAt.toMillis() : Number.MAX_SAFE_INTEGER);
-  return [...expenses].sort((a, b) => b.date.toMillis() - a.date.toMillis() || added(b) - added(a));
+  const getTime = (e: ExpenseRecord) =>
+    e.date?.toMillis?.() ||
+    (e.date instanceof Date ? e.date.getTime() : 0) ||
+    e.createdAt?.toMillis?.() ||
+    0;
+  const added = (e: ExpenseRecord) =>
+    e.createdAt?.toMillis ? e.createdAt.toMillis() : Number.MAX_SAFE_INTEGER;
+  return [...expenses].sort((a, b) => getTime(b) - getTime(a) || added(b) - added(a));
 }
 
 export type ExpenseDayGroup = { label: string; expenses: ExpenseRecord[] };

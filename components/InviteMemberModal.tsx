@@ -1,30 +1,57 @@
 import { useState } from "react";
-import { Modal, Pressable, Switch, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Relationship } from "../types/models";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onInvite: (data: {
     name: string;
-    role: string;
+    relationship: Relationship;
     email: string;
     isFullAccess: boolean;
-  }) => void;
+  }) => Promise<void>;
 };
+
+const RELATIONSHIPS: Relationship[] = ["Parent", "Child", "Other"];
 
 export function InviteMemberModal({ visible, onClose, onInvite }: Props) {
   const [name, setName] = useState("");
-  const [role, setRole] = useState("Member");
+  const [relationship, setRelationship] = useState<Relationship>("Other");
   const [email, setEmail] = useState("");
   const [isFullAccess, setIsFullAccess] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!name.trim()) return;
-    onInvite({ name, role, email, isFullAccess });
-    setName("");
-    setEmail("");
-    setRole("Member");
-    setIsFullAccess(true);
+  const cleanEmail = email.trim().toLowerCase();
+  const isValid = name.trim().length > 0 && cleanEmail.includes("@");
+
+  const handleSubmit = async () => {
+    if (!isValid) return;
+    try {
+      setSubmitting(true);
+      await onInvite({
+        name: name.trim(),
+        relationship,
+        email: cleanEmail,
+        isFullAccess,
+      });
+      setName("");
+      setEmail("");
+      setRelationship("Other");
+      setIsFullAccess(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -34,7 +61,10 @@ export function InviteMemberModal({ visible, onClose, onInvite }: Props) {
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View className="flex-1 justify-end bg-black/50">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        className="flex-1 justify-end bg-black/50"
+      >
         <Pressable className="flex-1" onPress={onClose} />
         <View className="bg-white rounded-t-[28px] p-6 gap-4 shadow-xl">
           <View className="flex-row items-center justify-between">
@@ -42,7 +72,7 @@ export function InviteMemberModal({ visible, onClose, onInvite }: Props) {
               Invite Family Member
             </Text>
             <Pressable onPress={onClose} hitSlop={8}>
-              <Text className="text-gray-400 font-bold text-[15px]">✕</Text>
+              <Text className="text-gray-400 font-bold text-[16px]">✕</Text>
             </Pressable>
           </View>
 
@@ -59,22 +89,39 @@ export function InviteMemberModal({ visible, onClose, onInvite }: Props) {
             />
           </View>
 
-          <View className="gap-1">
+          <View className="gap-1.5">
             <Text className="text-[12.5px] font-semibold text-[#374151]">
-              Relationship / Role
+              Relationship
             </Text>
-            <TextInput
-              className="h-[46px] rounded-[12px] border border-[#e1e5ea] px-3.5 text-[14px]"
-              value={role}
-              onChangeText={setRole}
-              placeholder="e.g. Sister, Brother, Daughter"
-              placeholderTextColor="#9ca3af"
-            />
+            <View className="flex-row gap-2">
+              {RELATIONSHIPS.map((rel) => {
+                const active = relationship === rel;
+                return (
+                  <Pressable
+                    key={rel}
+                    onPress={() => setRelationship(rel)}
+                    className={`flex-1 h-[36px] rounded-full items-center justify-center border ${
+                      active
+                        ? "bg-[#05bf78] border-[#05bf78]"
+                        : "bg-[#f8fafc] border-[#e1e5ea]"
+                    }`}
+                  >
+                    <Text
+                      className={`text-[13px] font-semibold ${
+                        active ? "text-white" : "text-[#475569]"
+                      }`}
+                    >
+                      {rel}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           <View className="gap-1">
             <Text className="text-[12.5px] font-semibold text-[#374151]">
-              Email or Phone
+              Email Address
             </Text>
             <TextInput
               className="h-[46px] rounded-[12px] border border-[#e1e5ea] px-3.5 text-[14px]"
@@ -101,14 +148,17 @@ export function InviteMemberModal({ visible, onClose, onInvite }: Props) {
 
           <Pressable
             onPress={handleSubmit}
-            className="h-[48px] rounded-full bg-[#05bf78] items-center justify-center mt-1"
+            disabled={submitting || !isValid}
+            className="h-[48px] rounded-full bg-[#05bf78] items-center justify-center flex-row gap-2 mt-1"
+            style={{ opacity: submitting || !isValid ? 0.6 : 1 }}
           >
+            {submitting && <ActivityIndicator color="#ffffff" size="small" />}
             <Text className="text-white font-bold text-[14px]">
-              Send Invite
+              {submitting ? "Sending..." : "Send Invite"}
             </Text>
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

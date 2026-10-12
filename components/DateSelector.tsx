@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { localDate } from "../constants/income";
 import Svg, { Path, Rect } from "react-native-svg";
 
-export function DateSelector({ value, onChange }: { value: string; onChange: (date: string) => void }) {
+export function DateSelector({ value, onChange, disabled = false }: { value: string; onChange: (date: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => new Date(`${value}T12:00:00`));
   const year = month.getFullYear();
@@ -12,7 +12,7 @@ export function DateSelector({ value, onChange }: { value: string; onChange: (da
   const days = new Date(year, monthIndex + 1, 0).getDate();
   const display = new Date(`${value}T12:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Select date, ${display}`} onPress={() => { setMonth(new Date(`${value}T12:00:00`)); setOpen(true); }} style={styles.field}><Text style={styles.value}>{display}</Text><View style={styles.calendar}><Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#078653" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><Rect x={3} y={5} width={18} height={16} rx={3} /><Path d="M7 3v4M17 3v4M3 11h18M8 15h2M14 15h2M8 18h2" /></Svg></View></Pressable>
+    <Pressable disabled={disabled} accessibilityRole="button" accessibilityLabel={`Select date, ${display}`} onPress={() => { setMonth(new Date(`${value}T12:00:00`)); setOpen(true); }} style={styles.field}><Text style={styles.value}>{display}</Text><View style={styles.calendar}><Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#078653" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><Rect x={3} y={5} width={18} height={16} rx={3} /><Path d="M7 3v4M17 3v4M3 11h18M8 15h2M14 15h2M8 18h2" /></Svg></View></Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.overlay}><Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close calendar" accessibilityRole="button" onPress={() => setOpen(false)} />
         <View style={styles.dialog} accessibilityViewIsModal>

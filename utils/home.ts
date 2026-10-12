@@ -82,3 +82,24 @@ export function getTopSpendingCategories(
 export function getPillBackground(fillColor: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(fillColor) ? `${fillColor}1A` : "#f1f3f5";
 }
+
+/**
+ * Total Balance for the month: Received income minus Shared spending. Expected income is not in hand
+ * yet, so it is left out. Returns null (shown as "Rs —") until both listeners are ready and both are
+ * showing the same month, so a half-loaded or mismatched figure is never displayed.
+ */
+export function getHomeBalance(args: {
+  incomeStatus: string;
+  expenseStatus: string;
+  incomeMonthKey: string;
+  expenseMonthKey: string;
+  income: { amount: number; status: string }[];
+  spent: number;
+}): number | null {
+  const { incomeStatus, expenseStatus, incomeMonthKey, expenseMonthKey, income, spent } = args;
+  if (incomeStatus !== "ready" || expenseStatus !== "ready" || incomeMonthKey !== expenseMonthKey) return null;
+  const receivedCents = income
+    .filter((entry) => entry.status === "Received")
+    .reduce((sum, entry) => sum + Math.round(entry.amount * 100), 0);
+  return (receivedCents - Math.round(spent * 100)) / 100;
+}

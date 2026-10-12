@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { markOnboardingCompleted } from "../services/onboardingService";
 
 import { AppInput } from "../components/AppInput";
 import { OrDivider } from "../components/OrDivider";
@@ -30,20 +31,31 @@ const HORIZONTAL_PADDING = 33;
 const ILLUSTRATION_ASPECT_RATIO = 257 / 247;
 
 export default function LoginScreen() {
+  useEffect(() => {
+    void markOnboardingCompleted();
+  }, []);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState<{ text: string; tone: "error" | "notice" } | null>(null);
+  const [message, setMessage] = useState<{
+    text: string;
+    tone: "error" | "notice";
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const { width: screenWidth } = useWindowDimensions();
-  const illustrationWidth = Math.min(257, screenWidth - HORIZONTAL_PADDING * 2 - 40);
+  const illustrationWidth = Math.min(
+    257,
+    screenWidth - HORIZONTAL_PADDING * 2 - 40,
+  );
   const illustrationHeight = illustrationWidth / ILLUSTRATION_ASPECT_RATIO;
 
   const handleLogin = async () => {
     if (submitting || resetting) return;
 
-    const validationError = validateEmail(email) ?? validateLoginPassword(password);
+    const validationError =
+      validateEmail(email) ?? validateLoginPassword(password);
     if (validationError) {
       setMessage({ text: validationError, tone: "error" });
       return;
@@ -68,7 +80,10 @@ export default function LoginScreen() {
     if (submitting || resetting) return;
 
     if (email.trim().length === 0) {
-      setMessage({ text: "Enter your email address above first.", tone: "error" });
+      setMessage({
+        text: "Enter your email address above first.",
+        tone: "error",
+      });
       return;
     }
     const emailError = validateEmail(email);
@@ -98,7 +113,10 @@ export default function LoginScreen() {
         className="flex-1"
       >
         <ScrollView
-          contentContainerStyle={{ paddingHorizontal: HORIZONTAL_PADDING, paddingTop: 24 }}
+          contentContainerStyle={{
+            paddingHorizontal: HORIZONTAL_PADDING,
+            paddingTop: 24,
+          }}
           keyboardShouldPersistTaps="handled"
         >
           <View className="items-center">
@@ -109,16 +127,24 @@ export default function LoginScreen() {
             />
           </View>
 
-          <Text className="mt-6 text-[28px] font-bold text-black">Welcome Back 👋</Text>
+          <Text className="mt-6 text-[28px] font-bold text-black">
+            Welcome Back 👋
+          </Text>
           <Text
             className="mt-3 text-center text-[15px] leading-[22px]"
             style={{ color: "#71717a" }}
           >
-            Pick up right where you left off and keep your home&apos;s financial goals on track.
+            Pick up right where you left off and keep your home&apos;s financial
+            goals on track.
           </Text>
 
           <View className="mt-8 gap-4">
-            <AppInput icon="mail" placeholder="Email" value={email} onChangeText={setEmail} />
+            <AppInput
+              icon="mail"
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+            />
             <View>
               <AppInput
                 icon="lock"
@@ -140,14 +166,20 @@ export default function LoginScreen() {
           {message ? (
             <Text
               className="mt-4 text-[12px]"
-              style={{ color: message.tone === "error" ? colors.error : colors.primary }}
+              style={{
+                color: message.tone === "error" ? colors.error : colors.primary,
+              }}
             >
               {message.text}
             </Text>
           ) : null}
 
           <View className="mt-6">
-            <PrimaryButton label="Log In" onPress={handleLogin} loading={submitting} />
+            <PrimaryButton
+              label="Log In"
+              onPress={handleLogin}
+              loading={submitting}
+            />
           </View>
 
           <View className="mt-6">
@@ -155,8 +187,16 @@ export default function LoginScreen() {
           </View>
 
           <View className="mt-6 flex-row gap-4">
-            <SocialButton icon="googleLogo" label="Google" onPress={handleGoogleLogin} />
-            <SocialButton icon="appleLogo" label="Apple" onPress={handleAppleLogin} />
+            <SocialButton
+              icon="googleLogo"
+              label="Google"
+              onPress={handleGoogleLogin}
+            />
+            <SocialButton
+              icon="appleLogo"
+              label="Apple"
+              onPress={handleAppleLogin}
+            />
           </View>
 
           <Text

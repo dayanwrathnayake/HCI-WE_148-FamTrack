@@ -44,6 +44,7 @@ type AuthContextValue = {
   profile: WithId<UserProfile> | null;
   profileStatus: ProfileStatus;
   signOut: () => Promise<void>;
+  retryProfile: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -92,14 +93,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const activeUid = isSignedIn && user ? user.uid : null;
 
   const [profileState, setProfileState] = useState<ProfileState>(IDLE_PROFILE);
+  const [profileAttempt, setProfileAttempt] = useState(0);
+  const retryProfile = useCallback(() => setProfileAttempt(attempt => attempt + 1), []);
 
   useEffect(() => {
     if (!activeUid) {
-      setProfileState(IDLE_PROFILE);
       return;
     }
 
-    setProfileState({ uid: activeUid, profile: null, status: "loading" });
     return subscribeToUserProfile(activeUid, (event) => {
       if (event.status === "ready") {
         setProfileState({ uid: activeUid, profile: event.profile, status: "ready" });
@@ -110,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfileState({ uid: activeUid, profile: null, status: "error" });
       }
     });
-  }, [activeUid]);
+  }, [activeUid, profileAttempt]);
 
   // Whatever is stored is only exposed if it belongs to the CURRENT user, so a previous
   // account's profile can never show up, not even for one render while switching accounts.
@@ -130,8 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile: exposedProfile.profile,
       profileStatus: exposedProfile.profileStatus,
       signOut,
+      retryProfile,
     }),
-    [user, isSignedIn, initializing, exposedProfile, signOut],
+    [user, isSignedIn, initializing, exposedProfile, signOut, retryProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

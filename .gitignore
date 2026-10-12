@@ -36,6 +36,10 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
 
 # generated native folders
 /ios

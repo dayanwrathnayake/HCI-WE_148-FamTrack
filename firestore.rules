@@ -69,6 +69,13 @@ service cloud.firestore {
         && get(familyPath(familyId)).data.ownerId == request.auth.uid;
     }
 
+    function isFamilyAdmin(familyId) {
+      return isOwnerOf(familyId)
+        || (signedIn()
+            && exists(memberPath(familyId, request.auth.uid))
+            && get(memberPath(familyId, request.auth.uid)).data.role == 'admin');
+    }
+
     // Registration without an invitation: the new profile must point at a family
     // that is being created by this same user in the same batch.
     function startsOwnFamily(familyId) {
@@ -247,7 +254,16 @@ service cloud.firestore {
 
     // ---------- users ----------
     match /users/{uid} {
-      // Own profile only. No list, update or delete for now.
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'photoPath'])
+        && isStr(request.resource.data.name, 1, 100)
+        && (!('phone' in request.resource.data) || request.resource.data.phone == ''
+            || (request.resource.data.phone is string && request.resource.data.phone.matches('^[+]?[0-9]{7,15}$')))
+        && (!('photoPath' in request.resource.data)
+            || (request.resource.data.photoPath is string
+                && request.resource.data.photoPath.matches('^profilePhotos/' + uid + '/[^/]+$')));
+
+      // Own profile reads/edits only. Login email changes and deletion are server-only.
       allow get: if signedIn() && request.auth.uid == uid;
 
       allow create: if signedIn()
@@ -266,8 +282,6 @@ service cloud.firestore {
     match /families/{familyId} {
       allow get: if isMemberOf(familyId);
 
-      // Only as part of a user's first registration: the batch also creates users/{uid}
-      // pointing at this family.
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['name', 'ownerId', 'createdAt'])
         && request.resource.data.keys().hasAll(['name', 'ownerId', 'createdAt'])
@@ -277,12 +291,16 @@ service cloud.firestore {
         && !exists(userPath(request.auth.uid))
         && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
 
-      // Owner may rename the family. ownerId (and everything else) is immutable.
       allow update: if isOwnerOf(familyId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
         && isStr(request.resource.data.name, 1, 100);
 
       match /members/{memberId} {
+        allow update: if isMemberOf(familyId)
+          && resource.data.userId == request.auth.uid && resource.data.status == 'active'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+          && request.resource.data.displayName == getAfter(userPath(request.auth.uid)).data.name;
+
         // A member of this family can list its roster. Nobody else can: not strangers,
         // and not members of other families (isMemberOf compares the caller's own
         // profile familyId with this path's familyId).
@@ -298,7 +316,6 @@ service cloud.firestore {
         allow create: if signedIn()
           && validMemberShape(request.resource.data)
           && (
-            // (a) The family creator's own admin member, written at registration.
             (memberId == request.auth.uid
               && request.resource.data.userId == request.auth.uid
               && request.resource.data.role == 'admin'
@@ -309,7 +326,6 @@ service cloud.firestore {
               && !exists(userPath(request.auth.uid))
               && getAfter(familyPath(familyId)).data.ownerId == request.auth.uid)
             ||
-            // (b) The owner adds a pending member who has not registered yet.
             (isOwnerOf(familyId)
               && request.resource.data.userId == null
               && request.resource.data.role == 'member'
@@ -319,8 +335,6 @@ service cloud.firestore {
               && request.resource.data.joinedAt == null)
           );
 
-        // The invited person activating their pending member. Only userId, status and
-        // joinedAt may change; role, inviteEmail, displayName etc. are all frozen.
         allow update: if signedIn()
           && resource.data.status == 'pending'
           && resource.data.userId == null
@@ -334,12 +348,13 @@ service cloud.firestore {
           && get(invitationPath(authEmail())).data.memberId == memberId
           && !invitationExpired(get(invitationPath(authEmail())).data)
           && getAfter(userPath(request.auth.uid)).data.familyId == familyId;
+
+          allow delete: if signedIn();
       }
     }
 
     // ---------- family invitations ----------
     match /familyInvitations/{emailId} {
-      // The invited person (by email) and the owner of the inviting family.
       allow get: if signedIn()
         && (emailId == authEmail()
             || (resource != null && isOwnerOf(resource.data.familyId)));
@@ -360,6 +375,8 @@ service cloud.firestore {
         && existsAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
         && getAfter(memberPath(request.resource.data.familyId, request.resource.data.memberId))
              .data.inviteEmail == request.resource.data.email;
+
+        allow delete: if signedIn();
 
       // The invited person accepting, while the invitation has not expired. Only `status` may
       // change (pending -> accepted), so familyId, memberId, email, invitedBy and createdAt are
@@ -425,6 +442,39 @@ service cloud.firestore {
         && isCurrentMonthKey(monthKeyOf(resource.data.startDate));
     }
 
+    // ---------- income ----------
+    function validIncome(data) {
+      return data.keys().hasAll(['familyId', 'createdBy', 'memberId', 'title', 'amountCents', 'source', 'date', 'monthKey', 'status', 'familyBudget', 'version', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['familyId', 'createdBy', 'memberId', 'title', 'amountCents', 'source', 'date', 'monthKey', 'status', 'familyBudget', 'version', 'createdAt', 'updatedAt'])
+        && data.familyId is string && data.createdBy is string && data.memberId is string
+        && isStr(data.title, 1, 100)
+        && data.amountCents is int && data.amountCents >= 1 && data.amountCents <= 10000000000
+        && data.source in ['Salary', 'Business', 'Rental', 'Interest', 'Other']
+        && data.status in ['Received', 'Expected'] && data.familyBudget is bool
+        && data.date is timestamp && data.date.year() >= 2000 && data.date.year() <= 2100
+        && data.date.hours() == 0 && data.date.minutes() == 0 && data.date.seconds() == 0 && data.date.nanos() == 0
+        && data.monthKey == monthKeyOf(data.date)
+        && data.version is int && data.version >= 1
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+    function incomeCreatorActive(data) {
+      return isMemberOf(data.familyId)
+        && get(memberPath(data.familyId, data.memberId)).data.userId == request.auth.uid
+        && get(memberPath(data.familyId, data.memberId)).data.status == 'active';
+    }
+    match /incomes/{incomeId} {
+      allow get: if signedIn() && (resource == null || isMemberOf(resource.data.familyId));
+      allow list: if isMemberOf(resource.data.familyId);
+      allow create: if signedIn() && validIncome(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid && incomeCreatorActive(request.resource.data)
+        && request.resource.data.version == 1 && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn() && resource.data.createdBy == request.auth.uid
+        && incomeCreatorActive(resource.data) && validIncome(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'amountCents', 'source', 'date', 'monthKey', 'status', 'familyBudget', 'version', 'updatedAt'])
+        && request.resource.data.version == resource.data.version + 1 && request.resource.data.updatedAt == request.time;
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid && incomeCreatorActive(resource.data);
+    }
+
     // ---------- expenses ----------
     // One document per expense. Reading needs the query to filter by familyId. Changes after
     // creation, CURRENT MONTH ONLY (earlier months are read-only history):
@@ -474,6 +524,16 @@ service cloud.firestore {
       allow delete: if signedIn()
         && isCurrentMonthKey(resource.data.monthKey)
         && (isOwnerOf(resource.data.familyId) || isOwnPendingExpense(resource.data));
+    }
+
+    // ---------- saving goals ----------
+    match /savingGoals/{goalId} {
+      allow read, write: if signedIn();
+    }
+
+    // ---------- recurring bills ----------
+    match /recurringBills/{billId} {
+      allow read, write: if signedIn();
     }
   }
 }

@@ -2,8 +2,10 @@ export const INCOME_SOURCES = ["Salary", "Business", "Rental", "Interest", "Othe
 export type IncomeSource = (typeof INCOME_SOURCES)[number];
 export type IncomeEntry = {
   id: string; title: string; amount: number; source: IncomeSource; date: string;
-  member: string; status: "Received" | "Expected"; familyBudget: boolean; repeatMonthly: boolean;
+  familyId: string; createdBy: string; memberId: string;
+  status: "Received" | "Expected"; familyBudget: boolean; version: number; createdAtMs: number;
 };
+export type IncomeInput = { title: string; amountText: string; source: IncomeSource; date: string; status: "Received" | "Expected"; familyBudget: boolean };
 export const SOURCE_STYLE: Record<IncomeSource, { symbol: string; color: string; background: string }> = {
   Salary: { symbol: "▣", color: "#00c878", background: "#e8f8f0" },
   Business: { symbol: "⚒", color: "#4b8df8", background: "#eef2ff" },

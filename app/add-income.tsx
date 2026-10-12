@@ -1,59 +1,83 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppBottomNav } from "../components/AppBottomNav";
 import { IncomeHeader } from "../components/IncomeHeader";
 import { DateSelector } from "../components/DateSelector";
-import { INCOME_SOURCES, IncomeSource, localDate, SOURCE_STYLE } from "../constants/income";
+import { INCOME_SOURCES, IncomeSource, type IncomeEntry, localDate, SOURCE_STYLE } from "../constants/income";
 import { useIncome } from "../context/IncomeContext";
+import { useAuth } from "../context/AuthContext";
+import { useFamily } from "../context/FamilyContext";
+import { getIncome, incomeErrorMessage } from "../services/incomeService";
+import { parseIncomeAmount, parseIncomeDate } from "../utils/income";
+import { getInitials } from "../utils/members";
 
 export default function AddIncomeScreen() {
-  const { addIncome, updateIncome, entries } = useIncome();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const existing = entries.find(entry => entry.id === id);
+  const { user, profile, retryProfile } = useAuth();
+  const { family, currentMember, status, retryFamily } = useFamily();
+  const familyId = family?.id;
+  const [attempt, setAttempt] = useState(0);
+  const key = id && family && user ? `${user.uid}:${family.id}:${id}:${attempt}` : null;
+  const [loaded, setLoaded] = useState<{ key: string; entry: IncomeEntry | null; error: string } | null>(null);
+  useEffect(() => {
+    if (!id || !familyId || !key || status !== "ready") return;
+    let active = true;
+    getIncome(id, familyId).then(entry => { if (active) setLoaded({ key, entry, error: "" }); }).catch(error => { if (active) setLoaded({ key, entry: null, error: incomeErrorMessage(error) }); });
+    return () => { active = false; };
+  }, [id, familyId, key, status]);
+  const pending = status === "loading" || status === "idle" || (status === "ready" && !!id && key !== loaded?.key);
+  if (status !== "ready" || !profile || currentMember?.status !== "active" || (id && (!loaded?.entry || loaded.key !== key || loaded.entry.createdBy !== user?.uid))) {
+    return <SafeAreaView style={styles.screen}><IncomeHeader title={id ? "Edit Income" : "Add Income"} onBack={() => router.replace("/income")} /><View style={styles.unavailable}>{pending ? <><ActivityIndicator color="#05bf78" /><Text>Loading income…</Text></> : <><Text style={styles.error}>{loaded?.key === key && loaded.error ? loaded.error : id ? "This income is unavailable, or you do not own it." : "An active family membership is needed to add income."}</Text><Pressable accessibilityRole="button" style={styles.cancel} onPress={() => { retryProfile(); retryFamily(); setAttempt(value => value + 1); }}><Text>Retry</Text></Pressable></>}</View><AppBottomNav activeRouteName="home" /></SafeAreaView>;
+  }
+  return <IncomeForm key={`${user?.uid}:${family?.id}:${id || "new"}`} existing={id ? loaded?.entry ?? undefined : undefined} name={profile.name} />;
+}
+
+function IncomeForm({ existing, name }: { existing?: IncomeEntry; name: string }) {
+  const { addIncome, updateIncome } = useIncome();
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
   const [source, setSource] = useState<IncomeSource>(existing?.source ?? "Salary");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [date, setDate] = useState(existing?.date ?? localDate());
-  const [member, setMember] = useState(existing?.member ?? "Me");
   const [status, setStatus] = useState<"Received" | "Expected">(existing?.status ?? "Received");
   const [familyBudget, setFamilyBudget] = useState(existing?.familyBudget ?? true);
-  const [repeatMonthly, setRepeatMonthly] = useState(existing?.repeatMonthly ?? false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const back = () => router.canGoBack() ? router.back() : router.replace("/income");
-  const save = () => {
-    const numeric = Number(amount.replace(/,/g, ""));
-    const parsed = new Date(`${date}T12:00:00`);
-    if (!Number.isFinite(numeric) || numeric <= 0) { setError("Enter an amount greater than zero."); return; }
-    if (!title.trim()) { setError("Enter an income title."); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || localDate(parsed) !== date) { setError("Select a valid date."); return; }
-    const input = { amount: numeric, source, title: title.trim(), date, member, status, familyBudget, repeatMonthly };
-    if (id && !existing) { setError("This income entry no longer exists."); return; }
-    if (existing) updateIncome(existing.id, input); else addIncome(input);
-    router.replace({ pathname: "/income", params: { month: date.slice(0, 7), saved: String(Date.now()), action: existing ? "updated" : "added" } });
+  const back = () => { if (busy) return; if (router.canGoBack()) router.back(); else router.replace("/income"); };
+  const save = async () => {
+    if (busy) return;
+    try { parseIncomeAmount(amount); parseIncomeDate(date); if (!title.trim()) throw new Error("Enter an income title."); }
+    catch (error) { setError(incomeErrorMessage(error)); return; }
+    setBusy(true); setError("");
+    try {
+      const input = { amountText: amount, source, title: title.trim(), date, status, familyBudget };
+      if (existing) await updateIncome(existing, input); else await addIncome(input);
+      router.replace({ pathname: "/income", params: { month: date.slice(0, 7), saved: String(Date.now()), action: existing ? "updated" : "added" } });
+    } catch (error) { setError(incomeErrorMessage(error)); }
+    finally { setBusy(false); }
   };
   return <View style={styles.screen}><SafeAreaView style={styles.screen} edges={["top"]}>
     <IncomeHeader title={existing ? "Edit Income" : "Add Income"} onBack={back} />
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>AMOUNT</Text>
-        <View style={styles.amountField}><Text style={styles.currency}>Rs</Text><TextInput accessibilityLabel="Amount" value={amount} onChangeText={text => setAmount(text.replace(/[^\d.]/g, ""))} placeholder="0.00" placeholderTextColor="#b0b5be" keyboardType="decimal-pad" style={styles.amountInput} maxLength={14} /></View>
-        <Text style={styles.label}>INCOME SOURCE</Text><View style={styles.chips}>{INCOME_SOURCES.map(item => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: source === item }} onPress={() => setSource(item)} style={[styles.chip, source === item && styles.selected]}><Text style={styles.chipText}>{SOURCE_STYLE[item].symbol} {item}</Text></Pressable>)}</View>
-        <View style={styles.fieldRow}><View style={styles.flex}><Text style={styles.label}>TITLE</Text><TextInput accessibilityLabel="Title" value={title} onChangeText={setTitle} placeholder="Ex: Monthly Salary" style={styles.input} maxLength={100} /></View><View style={styles.flex}><Text style={styles.label}>DATE</Text><DateSelector value={date} onChange={setDate} /></View></View>
-        <Text style={styles.label}>RECEIVED BY</Text><View style={styles.members}>{[{ name: "Me", initials: "ME", bg: "#ffd795" }, { name: "Mum", initials: "MU", bg: "#ffcde3" }, { name: "Dad", initials: "DA", bg: "#cbe1ff" }].map(item => <Pressable key={item.name} accessibilityRole="button" accessibilityState={{ selected: member === item.name }} onPress={() => setMember(item.name)} style={[styles.member, member === item.name && styles.selected]}><View style={[styles.avatar, { backgroundColor: item.bg }]}><Text style={styles.initials}>{item.initials}</Text></View><Text style={styles.chipText}>{item.name}</Text></Pressable>)}</View>
-        <Text style={styles.label}>STATUS</Text><View style={styles.segment}>{(["Received", "Expected"] as const).map(item => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => setStatus(item)} style={[styles.segmentButton, status === item && styles.segmentActive]}><Text style={[styles.segmentText, status === item && styles.segmentSelectedText]}>{item}</Text></Pressable>)}</View>
+        <View style={styles.amountField}><Text style={styles.currency}>Rs</Text><TextInput editable={!busy} accessibilityLabel="Amount" value={amount} onChangeText={text => setAmount(text.replace(/[^\d.]/g, ""))} placeholder="0.00" placeholderTextColor="#b0b5be" keyboardType="decimal-pad" style={styles.amountInput} maxLength={14} /></View>
+        <Text style={styles.label}>INCOME SOURCE</Text><View style={styles.chips}>{INCOME_SOURCES.map(item => <Pressable key={item} disabled={busy} accessibilityRole="button" accessibilityState={{ selected: source === item }} onPress={() => setSource(item)} style={[styles.chip, source === item && styles.selected]}><Text style={styles.chipText}>{SOURCE_STYLE[item].symbol} {item}</Text></Pressable>)}</View>
+        <View style={styles.fieldRow}><View style={styles.flex}><Text style={styles.label}>TITLE</Text><TextInput editable={!busy} accessibilityLabel="Title" value={title} onChangeText={setTitle} placeholder="Ex: Monthly Salary" style={styles.input} maxLength={100} /></View><View style={styles.flex}><Text style={styles.label}>DATE</Text><DateSelector disabled={busy} value={date} onChange={setDate} /></View></View>
+        <Text style={styles.label}>RECEIVED BY</Text><View style={[styles.member, styles.selected]}><View style={[styles.avatar, { backgroundColor: "#ffd795" }]}><Text style={styles.initials}>{getInitials(name)}</Text></View><Text style={styles.chipText}>Me · {name}</Text></View>
+        <Text style={styles.label}>STATUS</Text><View style={styles.segment}>{(["Received", "Expected"] as const).map(item => <Pressable key={item} disabled={busy} accessibilityRole="button" accessibilityState={{ selected: status === item }} onPress={() => setStatus(item)} style={[styles.segmentButton, status === item && styles.segmentActive]}><Text style={[styles.segmentText, status === item && styles.segmentSelectedText]}>{item}</Text></Pressable>)}</View>
         <View style={styles.options}>
-          <View style={[styles.option, styles.divider]}><View style={[styles.optionIcon, { backgroundColor: "#e8f8f0" }]}><Text>⌂</Text></View><View style={styles.flex}><Text style={styles.optionTitle}>Add to family budget</Text><Text style={styles.optionSubtitle}>Counts towards the shared pool</Text></View><Switch accessibilityLabel="Add to family budget" value={familyBudget} onValueChange={setFamilyBudget} trackColor={{ false: "#d9dfe7", true: "#00c878" }} thumbColor="white" /></View>
-          <View style={styles.option}><View style={[styles.optionIcon, { backgroundColor: "#edf2ff" }]}><Text>▣</Text></View><View style={styles.flex}><Text style={styles.optionTitle}>Repeat monthly</Text><Text style={styles.optionSubtitle}>Save as a monthly income</Text></View><Switch accessibilityLabel="Repeat monthly" value={repeatMonthly} onValueChange={setRepeatMonthly} trackColor={{ false: "#d9dfe7", true: "#00c878" }} thumbColor="white" /></View>
+          <View style={styles.option}><View style={[styles.optionIcon, { backgroundColor: "#e8f8f0" }]}><Text>⌂</Text></View><View style={styles.flex}><Text style={styles.optionTitle}>Family contribution</Text><Text style={styles.optionSubtitle}>Mark this income for the shared pool</Text></View><Switch disabled={busy} accessibilityLabel="Add to family budget" value={familyBudget} onValueChange={setFamilyBudget} trackColor={{ false: "#d9dfe7", true: "#00c878" }} thumbColor="white" /></View>
         </View>
         {!!error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
-        <View style={styles.buttons}><Pressable accessibilityRole="button" onPress={back} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" onPress={save} style={styles.save}><Text style={styles.saveText}>{existing ? "Update Income" : "Save Income"}</Text></Pressable></View>
+        <View style={styles.buttons}><Pressable accessibilityRole="button" disabled={busy} onPress={back} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ busy, disabled: busy }} onPress={save} style={styles.save}>{busy ? <ActivityIndicator color="#062a1e" /> : <Text style={styles.saveText}>{existing ? "Update Income" : "Save Income"}</Text>}</Pressable></View>
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView><AppBottomNav activeRouteName="home" /></View>;
 }
 const styles = StyleSheet.create({
+  unavailable: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center", gap: 15 },
   screen: { flex: 1, backgroundColor: "white" }, content: { paddingHorizontal: 24, paddingBottom: 24, width: "100%", maxWidth: 550, alignSelf: "center" },
   label: { fontSize: 9, letterSpacing: 0.8, color: "#7c879b", marginBottom: 9, marginTop: 18 },
   amountField: { borderWidth: 1, borderColor: "#747474", borderRadius: 17, minHeight: 66, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 8 }, currency: { fontSize: 11, color: "#737373" }, amountInput: { flex: 1, fontSize: 26, fontWeight: "800", padding: 0, color: "#111111" },
