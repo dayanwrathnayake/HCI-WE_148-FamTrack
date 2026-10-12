@@ -101,16 +101,15 @@ export default function SavingsGoalsScreen() {
 
         <Pressable
           onPress={handleCreateNewGoal}
-          className="h-[52px] rounded-full items-center justify-center flex-row gap-2"
-          style={({ pressed }) => ({
+          className="h-[52px] rounded-full items-center justify-center flex-row gap-2 bg-[#05bf78]"
+          style={{
             backgroundColor: "#05bf78",
             shadowColor: "#00c46a",
             shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.2,
+            shadowOpacity: 0.25,
             shadowRadius: 6,
             elevation: 3,
-            opacity: pressed ? 0.85 : 1,
-          })}
+          }}
         >
           <Text className="text-white text-[16px] font-bold">
             + Create New Goal

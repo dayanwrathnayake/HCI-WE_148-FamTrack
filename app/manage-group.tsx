@@ -253,16 +253,15 @@ export default function ManageGroupScreen() {
           {isAdmin && (
             <Pressable
               onPress={handleDeleteGroup}
-              className="h-[50px] rounded-full items-center justify-center mt-2"
-              style={({ pressed }) => ({
+              className="h-[50px] rounded-full items-center justify-center mt-2 bg-[#ff6b6b]"
+              style={{
                 backgroundColor: "#ff6b6b",
                 shadowColor: "#ff6b6b",
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.25,
                 shadowRadius: 6,
                 elevation: 3,
-                opacity: pressed ? 0.85 : 1,
-              })}
+              }}
             >
               <Text className="text-white text-[15px] font-bold">
                 Delete Family Group
