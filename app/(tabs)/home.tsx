@@ -17,14 +17,16 @@ import { useAuth } from "../../context/AuthContext";
 import { useBudget } from "../../context/BudgetContext";
 import { useExpenses } from "../../context/ExpenseContext";
 import { useFamily } from "../../context/FamilyContext";
+import { useIncome } from "../../context/IncomeContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { formatRs } from "../../utils/budget";
-import { getHomeBudgetSummary, getPillBackground, getTopSpendingCategories } from "../../utils/home";
+import { money } from "../../constants/income";
+import { getHomeBalance, getHomeBudgetSummary, getPillBackground, getTopSpendingCategories } from "../../utils/home";
 import { getFirstName } from "../../utils/names";
 
-// Total Balance means income minus expenses, so it needs the Income feature (another teammate's,
-// still mock data). Until that has a real backend it shows "Rs —" instead of a made-up amount.
-const TOTAL_BALANCE = "Rs —";
+// Total Balance is this month's Received income minus Shared spending. It shows "Rs —" until both
+// have loaded for the same month.
+const NO_BALANCE = "Rs —";
 const OVER_BUDGET_COLOR = "#ef4444";
 
 type CategoryPillData = {
@@ -58,8 +60,19 @@ export default function HomeScreen() {
   // The budget card reads the same sources as Family Budget: this month's budget and the family's
   // SHARED expenses (Pending ones are never in `totals`).
   const { isAdmin } = useFamily();
-  const { status: budgetStatus, budget } = useBudget();
+  const { status: budgetStatus, budget, monthKey: budgetMonthKey } = useBudget();
   const { status: expenseStatus, totals } = useExpenses();
+  const { status: incomeStatus, entries: incomeEntries, monthKey: incomeMonthKey } = useIncome();
+  const balance = getHomeBalance({
+    incomeStatus,
+    expenseStatus,
+    incomeMonthKey,
+    expenseMonthKey: budgetMonthKey,
+    income: incomeEntries,
+    spent: totals.spent,
+  });
+  const balanceText =
+    balance === null ? NO_BALANCE : `${balance < 0 ? "-" : ""}Rs ${money(Math.abs(balance))}`;
   const summary = getHomeBudgetSummary({
     budgetStatus,
     expenseStatus,
@@ -131,7 +144,7 @@ export default function HomeScreen() {
                 adjustsFontSizeToFit
                 minimumFontScale={0.85}
               >
-                {balanceHidden ? "Rs ••,•••.••" : TOTAL_BALANCE}
+                {balanceHidden ? "Rs ••,•••.••" : balanceText}
               </Text>
             </View>
             <Pressable
