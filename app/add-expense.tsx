@@ -135,7 +135,15 @@ export default function AddExpenseScreen() {
         <Text className="text-[20px] font-bold text-[#111827]">
           Add Expense
         </Text>
-        <View className="w-[34px]" />
+        <Pressable
+          onPress={() => router.push("/expense-history")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="View Expense History"
+          className="h-[34px] w-[34px] rounded-full items-center justify-center bg-[#0e1116]"
+        >
+          <Icon name="history" size={16} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -331,6 +339,17 @@ export default function AddExpenseScreen() {
             </Text>
           </Pressable>
         </View>
+
+        <Pressable
+          onPress={() => router.push("/expense-history")}
+          hitSlop={8}
+          className="items-center justify-center py-2"
+        >
+          <Text className="text-[13px] font-medium text-[#6b7280]">
+            Looking for past records?{" "}
+            <Text className="text-[#05bf78] font-bold">View Expense History</Text>
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

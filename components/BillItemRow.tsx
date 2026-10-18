@@ -98,11 +98,11 @@ export function BillItemRow({ bill, isLast = false }: Props) {
             </Text>
 
             {bill.paidByText ? (
-              <Text className="text-[11px] text-[#64748b] mt-0.5">
+              <Text key="paid-by" className="text-[11px] text-[#64748b] mt-0.5">
                 {bill.paidByText}
               </Text>
             ) : (
-              <View className="flex-row items-center gap-1.5 mt-0.5">
+              <View key="due-info" className="flex-row items-center gap-1.5 mt-0.5">
                 <Text className="text-[11.5px] text-[#64748b]">
                   {bill.isAutoPay ? "Auto-debit" : "Due"} • {bill.dueDate}
                 </Text>
@@ -127,6 +127,7 @@ export function BillItemRow({ bill, isLast = false }: Props) {
 
             {bill.status === "UNPAID" && (
               <Pressable
+                key="badge-unpaid"
                 onPress={handleTogglePaid}
                 className="bg-[#fef3c7] px-2 py-0.5 rounded-[6px]"
                 style={({ pressed }) => ({ opacity: pressed ? 0.75 : 1 })}
@@ -138,7 +139,7 @@ export function BillItemRow({ bill, isLast = false }: Props) {
             )}
 
             {bill.status === "AUTO-PAY" && (
-              <View className="bg-[#ecfdf5] px-2 py-0.5 rounded-[6px]">
+              <View key="badge-autopay" className="bg-[#ecfdf5] px-2 py-0.5 rounded-[6px]">
                 <Text className="text-[9px] font-extrabold tracking-wider text-[#059669]">
                   AUTO-PAY
                 </Text>
@@ -146,7 +147,7 @@ export function BillItemRow({ bill, isLast = false }: Props) {
             )}
 
             {bill.status === "PAID" && (
-              <View className="w-[20px] h-[20px] rounded-full bg-[#00c46a] items-center justify-center">
+              <View key="badge-paid" className="w-[20px] h-[20px] rounded-full bg-[#00c46a] items-center justify-center">
                 <Text className="text-white text-[11px] font-bold">✓</Text>
               </View>
             )}

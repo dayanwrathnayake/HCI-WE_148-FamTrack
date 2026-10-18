@@ -118,7 +118,11 @@ export default function AddBillScreen() {
         iconBg: selectedCategory.bg,
       });
 
-      handleBack();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/recurring-bills");
+      }
     } catch (error: any) {
       Alert.alert(
         "Error",
@@ -284,8 +288,10 @@ export default function AddBillScreen() {
             disabled={!isValid || submitting}
             onPress={handleSaveBill}
           >
-            {submitting && <ActivityIndicator color="#ffffff" size="small" />}
-            <Text className="text-[15px] font-bold text-white">
+            {submitting ? (
+              <ActivityIndicator key="spinner" color="#ffffff" size="small" />
+            ) : null}
+            <Text key="label" className="text-[15px] font-bold text-white">
               {submitting ? "Saving..." : "Add Recurring Bill"}
             </Text>
           </Pressable>
