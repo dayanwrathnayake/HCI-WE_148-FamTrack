@@ -457,6 +457,29 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.createdBy == request.auth.uid && incomeCreatorActive(resource.data);
     }
 
+    // Shopping lists and their initial items are created atomically.
+    match /shoppingLists/{listId} {
+      allow read: if isMemberOf(resource.data.familyId);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'familyId', 'createdBy', 'createdAt'])
+        && isStr(request.resource.data.name, 1, 80)
+        && isMemberOf(request.resource.data.familyId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      match /items/{itemId} {
+        function parent() { return getAfter(/databases/$(database)/documents/shoppingLists/$(listId)).data; }
+        allow read: if isMemberOf(get(/databases/$(database)/documents/shoppingLists/$(listId)).data.familyId);
+        allow create: if signedIn() && parent().createdBy == request.auth.uid
+          && parent().createdAt == request.time && isMemberOf(parent().familyId)
+          && request.resource.data.keys().hasOnly(['name', 'quantity', 'unitPriceCents', 'purchased', 'position'])
+          && isStr(request.resource.data.name, 1, 80)
+          && request.resource.data.quantity is int && request.resource.data.quantity >= 1 && request.resource.data.quantity <= 999
+          && request.resource.data.unitPriceCents is int && request.resource.data.unitPriceCents >= 0 && request.resource.data.unitPriceCents <= 100000000
+          && request.resource.data.purchased == false
+          && request.resource.data.position is int && request.resource.data.position >= 0 && request.resource.data.position < 20;
+      }
+    }
+
     // ---------- expenses ----------
     match /expenses/{expenseId} {
       allow read, write: if signedIn();

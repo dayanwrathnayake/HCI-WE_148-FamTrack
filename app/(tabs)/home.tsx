@@ -282,6 +282,11 @@ export default function HomeScreen() {
               <Text style={styles.shortcutLabel}>Bills & Reminders</Text>
             </Pressable>
           </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open shopping lists" onPress={() => router.push("/shopping-lists")} style={styles.shoppingCard}>
+            <Text style={styles.shoppingIcon}>🛒</Text>
+            <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.shortcutLabel}>Shopping Lists</Text><Text style={styles.shoppingHint}>Plan your family purchases</Text><Text style={styles.shoppingLink}>Open Lists</Text></View>
+            <Text style={styles.shoppingLink}>›</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -289,6 +294,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  shoppingCard: { flexDirection: "row", alignItems: "center", gap: 14, padding: 20, marginTop: 16, borderRadius: 20, backgroundColor: "#ecfaf4", borderWidth: 1, borderColor: "#d3ede1" },
+  shoppingIcon: { fontSize: 30 }, shoppingHint: { fontSize: 12, color: "#667b72", marginTop: 5 }, shoppingLink: { fontSize: 14, fontWeight: "700", color: "#07865e", marginTop: 9 },
   notificationButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   notificationDot: { position: "absolute", right: 5, top: 4, width: 11, height: 11, borderRadius: 6, backgroundColor: "#ef4444", borderWidth: 2, borderColor: "white" },
   screen: {
