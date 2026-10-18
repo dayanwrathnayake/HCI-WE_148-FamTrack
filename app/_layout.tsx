@@ -49,6 +49,8 @@ function RootNavigator() {
           <Stack.Screen name="add-income" />
           <Stack.Screen name="reports" />
           <Stack.Screen name="notifications" />
+          <Stack.Screen name="create-shopping-list" />
+          <Stack.Screen name="shopping-lists" />
         </Stack.Protected>
       </Stack>
 
