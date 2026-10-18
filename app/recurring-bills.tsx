@@ -145,7 +145,7 @@ export default function RecurringBillsScreen() {
           </View>
 
           {loading ? (
-            <View className="py-12 items-center justify-center">
+            <View key="loading-bills" className="py-12 items-center justify-center">
               <ActivityIndicator size="large" color="#05bf78" />
               <Text className="text-[13px] text-gray-400 mt-2 font-medium">
                 Loading family bills...
@@ -166,13 +166,26 @@ export default function RecurringBillsScreen() {
                 </View>
 
                 {filteredUpcoming.length === 0 ? (
-                  <View className="bg-white rounded-[20px] p-6 items-center">
+                  <View
+                    key="empty-upcoming-bills"
+                    className="bg-white rounded-[20px] p-6 items-center"
+                  >
                     <Text className="text-[13px] text-gray-400">
                       No upcoming bills in this category
                     </Text>
                   </View>
                 ) : (
-                  <View className="bg-white rounded-[22px] p-4 shadow-sm shadow-black/5 elevation-1">
+                  <View
+                    key="list-upcoming-bills"
+                    className="bg-white rounded-[22px] p-4"
+                    style={{
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.05,
+                      shadowRadius: 6,
+                      elevation: 1,
+                    }}
+                  >
                     {filteredUpcoming.map((bill, index) => (
                       <BillItemRow
                         key={bill.id}
@@ -190,13 +203,26 @@ export default function RecurringBillsScreen() {
                 </Text>
 
                 {filteredPaid.length === 0 ? (
-                  <View className="bg-white rounded-[20px] p-6 items-center">
+                  <View
+                    key="empty-paid-bills"
+                    className="bg-white rounded-[20px] p-6 items-center"
+                  >
                     <Text className="text-[13px] text-gray-400">
                       No paid bills in this category
                     </Text>
                   </View>
                 ) : (
-                  <View className="bg-white rounded-[22px] p-4 shadow-sm shadow-black/5 elevation-1">
+                  <View
+                    key="list-paid-bills"
+                    className="bg-white rounded-[22px] p-4"
+                    style={{
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.05,
+                      shadowRadius: 6,
+                      elevation: 1,
+                    }}
+                  >
                     {filteredPaid.map((bill, index) => (
                       <BillItemRow
                         key={bill.id}

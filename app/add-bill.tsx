@@ -118,7 +118,11 @@ export default function AddBillScreen() {
         iconBg: selectedCategory.bg,
       });
 
-      router.replace("/recurring-bills");
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/recurring-bills");
+      }
     } catch (error: any) {
       Alert.alert(
         "Error",
@@ -271,7 +275,7 @@ export default function AddBillScreen() {
           </Pressable>
 
           <Pressable
-            className="flex-1 h-[50px] rounded-full items-center justify-center flex-row gap-2 bg-[#05bf78]"
+            className="flex-1 h-[50px] rounded-full items-center justify-center flex-row gap-2"
             style={{
               flex: 1.4,
               backgroundColor: isValid && !submitting ? "#05bf78" : "#a0d9c0",
